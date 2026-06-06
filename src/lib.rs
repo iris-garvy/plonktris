@@ -1,5 +1,6 @@
 use plonky2::field::types::{Field};
 use plonky2::iop::target::{BoolTarget, Target};
+use plonky2::iop::witness::{PartialWitness, WitnessWrite};
 use plonky2::plonk::circuit_builder::{CircuitBuilder};
 use plonky2::field::goldilocks_field::GoldilocksField;
 
@@ -17,19 +18,44 @@ pub fn prove_requirements(
     let config = CircuitConfig::standard_recursion_config();
     let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
 
+    let num_pieces = queue.len();
     let bits_t = deserialize_board(&mut builder);
     let board_t =bits_to_board(&mut builder, bits_t)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let queue_t = deserialize_queue(&mut builder, queue.len());
-    let actions_t = deserialize_actions(&mut builder, queue.len(), secret_moves)
+    let queue_t = deserialize_queue(&mut builder, num_pieces);
+    let actions_t = deserialize_actions(&mut builder, num_pieces);
+    let zero = GoldilocksField::ZERO;
+    let one = GoldilocksField::ONE;
+
+    let mut pw = PartialWitness::new();
+    for (i, &byte) in board.iter().enumerate() {
+        if byte == 1 {
+            pw.set_target(bits_t[i], one).map_err(|e| JsValue::from_str(&e.to_string()))?;
+        } else {
+            pw.set_target(bits_t[i], zero).map_err(|e| JsValue::from_str(&e.to_string()))?;
+        }
+    }
+    for (i, &piece) in queue.iter().enumerate() {
+        pw.set_target(queue_t[i], GoldilocksField::from_canonical_u8(piece))
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    }
+    for piece in 0..num_pieces {
+        for act in 0..32 {
+            let index = piece * 32 + act;
+            pw.set_target(actions_t[piece][act], GoldilocksField::from_canonical_u8(secret_moves[index]))
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        }
+    }
+
 
     let ledger = simulate(&mut builder, board_t, queue_t, actions_t);
     verify_requirements(&mut builder, requirements, ledger);
 
+    let data = builder.build::<plonky2::plonk::config::PoseidonGoldilocksConfig>();
+    let proof = data.prove(pw)
+    .map_err(|e| JsValue::from_str(&format!("prove failed: {e:#?}")))?;
 
-
-    Ok(Vec::new())
+    Ok(proof.to_bytes())
 }
 
 fn verify_requirements(
@@ -83,8 +109,15 @@ fn deserialize_queue(builder: &mut CircuitBuilder<GoldilocksField, 2>, queue_len
     queue_targets
 }
 
-fn deserialize_actions(builder: &mut CircuitBuilder<GoldilocksField, 2>, total_actions) -> Vec<Vec<Target>>{
-
+fn deserialize_actions(builder: &mut CircuitBuilder<GoldilocksField, 2>, queue_length: usize) -> Vec<Vec<Target>>{
+    let mut action_targets = Vec::new();
+    for piece in 0..queue_length{
+        action_targets.push(Vec::new());
+        for _ in 0..32 {
+            action_targets[piece].push(builder.add_virtual_target());
+        }
+    }
+    action_targets
 }
 
 fn assign_actions(
@@ -864,7 +897,7 @@ fn test_simulate_one_o_piece_empty_board() {
     let three = builder.constant(GoldilocksField::from_canonical_usize(3));
     let four = builder.constant(GoldilocksField::from_canonical_usize(4));
     let five = builder.constant(GoldilocksField::from_canonical_usize(5));
-    let six = builder.constant(GoldilocksField::from_canonical_usize(6));
+    let _six = builder.constant(GoldilocksField::from_canonical_usize(6));
 
     //i o t s z l j
     let i = zero;
@@ -873,15 +906,13 @@ fn test_simulate_one_o_piece_empty_board() {
     let s = three;
     let z = four;
     let l = five;
-    let j = six;
 
-    let queue = vec![i, z, l, s, o, t, i, i, i, i, i, i, i, i, i, i, i, i,];
+    let queue = vec![i, z, l, s, o, t,];
 
     // left right cw ccw sd
     let left = zero;
     let right = one;
     let cw = two;
-    let ccw = three;
     let sd = four;
 
     let mut tspin = vec![left, left, left, cw];
@@ -897,18 +928,6 @@ fn test_simulate_one_o_piece_empty_board() {
         vec![cw, right, right],
         vec![right; 4],
         tspin,
-        vec![sd;12],
-        vec![sd;12],
-        vec![sd;12],
-        vec![sd;12],
-        vec![sd;12],
-        vec![sd;12],
-        vec![sd;12],
-        vec![sd;12],
-        vec![sd;12],
-        vec![sd;12],
-        vec![sd;12],
-        vec![sd;12],
     ];
 
     let ledger = simulate(&mut builder, board, queue, actions);
@@ -921,7 +940,7 @@ fn test_simulate_one_o_piece_empty_board() {
 
 
     println!("Number of Gates: {:?} ", builder.num_gates());
-    let mut pw = PartialWitness::new();
+    let pw = PartialWitness::new();
 
     let prove_start = Instant::now();
 
