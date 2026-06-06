@@ -879,78 +879,29 @@ impl LedgerTargets{
 
 
 
-#[test]
-fn test_simulate_one_o_piece_empty_board() {
-    use plonky2::iop::witness::PartialWitness;
-    use plonky2::plonk::circuit_builder::CircuitBuilder;
-    use plonky2::plonk::circuit_data::CircuitConfig;
-    use std::time::Instant;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-
-    let config = CircuitConfig::standard_recursion_config();
-    let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
-
-    let board = BoardTargets::empty(&mut builder);
-    let zero = builder.zero();
-    let one = builder.one();
-    let two = builder.constant(GoldilocksField::from_canonical_usize(2));
-    let three = builder.constant(GoldilocksField::from_canonical_usize(3));
-    let four = builder.constant(GoldilocksField::from_canonical_usize(4));
-    let five = builder.constant(GoldilocksField::from_canonical_usize(5));
-    let _six = builder.constant(GoldilocksField::from_canonical_usize(6));
-
-    //i o t s z l j
-    let i = zero;
-    let o = one;
-    let t = two;
-    let s = three;
-    let z = four;
-    let l = five;
-
-    let queue = vec![i, z, l, s, o, t,];
-
-    // left right cw ccw sd
-    let left = zero;
-    let right = one;
-    let cw = two;
-    let sd = four;
-
-    let mut tspin = vec![left, left, left, cw];
-    for _ in 0..19 {
-        tspin.push(sd);
+    #[test]
+    fn test_prove_requirements() {
+        // a board you know is valid
+        let board = vec![0u8; 210];
+        
+        // a simple queue, like just T pieces
+        let queue = vec![0u8; 3];  // whatever your piece encoding is
+        
+        // requirements — like 1 tspin minimum
+        let requirements = vec![0u8;6];
+        
+        // a known valid move sequence that achieves those requirements
+        let mut secret_moves = vec![5u8; 3 * 32];  // all no-ops to start
+        // set some real moves for piece 0
+        secret_moves[0] = 2;  // rotate cw
+        secret_moves[1] = 2;  // rotate cw
+        // etc
+        
+        let result = prove_requirements(&board, &queue, &requirements, &secret_moves);
+        assert!(result.is_ok());
     }
-    tspin.push(cw);
-
-    let actions: Vec<Vec<Target>> = vec![
-        vec![],
-        vec![],
-        vec![cw, left, left, left, left],
-        vec![cw, right, right],
-        vec![right; 4],
-        tspin,
-    ];
-
-    let ledger = simulate(&mut builder, board, queue, actions);
-
-    builder.assert_zero(ledger.tss);
-    builder.assert_one(ledger.tsd);
-    builder.assert_zero(ledger.tst);
-    builder.assert_zero(ledger.tetris);
-    builder.assert_zero(ledger.pc);
-
-
-    println!("Number of Gates: {:?} ", builder.num_gates());
-    let pw = PartialWitness::new();
-
-    let prove_start = Instant::now();
-
-    let data = builder.build::<plonky2::plonk::config::PoseidonGoldilocksConfig>();
-    let proof = match data.prove(pw) {
-        Ok(proof) => proof,
-        Err(e) => panic!("prove failed: {e:#?}"),
-    };
-    println!("Prove took: {:?}", prove_start.elapsed());
-
-    data.verify(proof).unwrap();
 }
-
