@@ -13,6 +13,9 @@ pub fn prove_requirements(
     requirements: &[u8],
     secret_moves: &[u8]
 ) -> Result<Vec<u8>, JsValue> {
+    let zero = GoldilocksField::ZERO;
+    let one = GoldilocksField::ONE;
+
     let config = CircuitConfig::standard_recursion_config();
     let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
 
@@ -22,8 +25,7 @@ pub fn prove_requirements(
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
     let queue_t = deserialize_queue(&mut builder, num_pieces);
     let actions_t = deserialize_actions(&mut builder, num_pieces);
-    let zero = GoldilocksField::ZERO;
-    let one = GoldilocksField::ONE;
+    let requirements_t = deserialize_requirements(&mut builder);
 
     let mut pw = PartialWitness::new();
     for (i, &byte) in board.iter().enumerate() {
@@ -44,10 +46,13 @@ pub fn prove_requirements(
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         }
     }
-
+    for (i, &req) in requirements.iter().enumerate() {
+        pw.set_target(requirements_t[i], GoldilocksField::from_canonical_u8(req))
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    }
 
     let ledger = simulate(&mut builder, board_t, queue_t, actions_t);
-    verify_requirements(&mut builder, requirements, ledger);
+    verify_requirements(&mut builder, requirements_t, ledger);
 
     let data = builder.build::<plonky2::plonk::config::PoseidonGoldilocksConfig>();
     let proof = data.prove(pw)
@@ -59,6 +64,7 @@ pub fn prove_requirements(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use plonky2::util::serialization::DefaultGateSerializer;
 
     #[test]
     fn test_prove_requirements() {
@@ -81,25 +87,28 @@ mod tests {
         let result = prove_requirements(&board, &queue, &requirements, &secret_moves);
         assert!(result.is_ok());
     }
-}
+    
+    #[test]
+    fn check_verifier_size() {
+        
 
+        let config = CircuitConfig::standard_recursion_config();
+        let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
+        let gate_serializer = DefaultGateSerializer;
 
-#[test]
-fn check_verifier_size() {
-    let config = CircuitConfig::standard_recursion_config();
-    let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
-    
-    let num_pieces = 5;
-    let bits_t = deserialize_board(&mut builder);
-    let board_t = bits_to_board(&mut builder, bits_t).unwrap();
-    let queue_t = deserialize_queue(&mut builder, num_pieces);
-    let actions_t = deserialize_actions(&mut builder, num_pieces);
-    let ledger = simulate(&mut builder, board_t, queue_t, actions_t);
-    
-    let data = builder.build::<plonky2::plonk::config::PoseidonGoldilocksConfig>();
-    let verifier_bytes = data.verifier_only.to_bytes().unwrap();
-    let common_bytes = data.common.to_bytes().unwrap();
-    
-    println!("verifier_only: {} bytes", verifier_bytes.len());
-    println!("common_data: {} bytes", common_bytes.len());
+        let num_pieces = 5;
+        let bits_t = deserialize_board(&mut builder);
+        let board_t = bits_to_board(&mut builder, bits_t).unwrap();
+        let queue_t = deserialize_queue(&mut builder, num_pieces);
+        let actions_t = deserialize_actions(&mut builder, num_pieces);
+        let ledger = simulate(&mut builder, board_t, queue_t, actions_t);
+        
+        let data = builder.build::<plonky2::plonk::config::PoseidonGoldilocksConfig>();
+        let verifier_bytes = data.verifier_only.to_bytes().unwrap();
+        let common_bytes = data.common.to_bytes(&gate_serializer).unwrap();
+        
+        println!("verifier_only: {} bytes", verifier_bytes.len());
+        println!("common_data: {} bytes", common_bytes.len());
+    }
+
 }

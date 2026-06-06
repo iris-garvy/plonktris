@@ -3,22 +3,25 @@ use plonky2::iop::target::{BoolTarget, Target};
 use plonky2::plonk::circuit_builder::{CircuitBuilder};
 use plonky2::field::goldilocks_field::GoldilocksField;
 
+
+pub fn deserialize_requirements(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> [Target; 6] {
+    [builder.add_virtual_target(); 6]
+}
+
 pub fn verify_requirements(
     builder: &mut CircuitBuilder<GoldilocksField, 2>, 
-    requirements: &[u8], 
+    requirements: [Target; 6], 
     ledger: LedgerTargets
 ) {
-    let mut target = [builder.zero(); 6];
     let mut difference = [builder.zero(); 6];
-    for req in 0..6 {
-        target[req] = builder.constant(GoldilocksField::from_canonical_u8(requirements[req]));
-    }
-    difference[0] = builder.sub(target[0], ledger.tss);
-    difference[1] = builder.sub(target[1], ledger.tsd);
-    difference[2] = builder.sub(target[2], ledger.tst);
-    difference[3] = builder.sub(target[3], ledger.tetris);
-    difference[4] = builder.sub(target[4], ledger.pc);
-    difference[5] = builder.sub(target[1], ledger.attack);
+
+    difference[0] = builder.sub(requirements[0], ledger.tss);
+    difference[1] = builder.sub(requirements[1], ledger.tsd);
+    difference[2] = builder.sub(requirements[2], ledger.tst);
+    difference[3] = builder.sub(requirements[3], ledger.tetris);
+    difference[4] = builder.sub(requirements[4], ledger.pc);
+    difference[5] = builder.sub(requirements[5], ledger.attack);
+
     for req in 0..6 {
         builder.assert_zero(difference[req]);
     }

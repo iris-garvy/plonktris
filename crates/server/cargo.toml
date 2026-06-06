@@ -2,6 +2,7 @@
 name = "plonktris-server"
 version = "0.1.0"
 edition = "2021"
+default-run = "plonktris-server"
 
 [dependencies]
 circuit = { path = "../circuit" }
@@ -11,3 +12,4 @@ sqlx = { version = "0.7", features = ["postgres", "runtime-tokio", "uuid"] }
 uuid = { version = "1", features = ["v4"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+plonky2 = { version = "1.1", default-features = false }
