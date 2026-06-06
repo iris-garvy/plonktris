@@ -1,64 +1,9 @@
 use plonky2::field::types::{Field};
 use plonky2::iop::target::{BoolTarget, Target};
-use plonky2::iop::witness::{PartialWitness, WitnessWrite};
 use plonky2::plonk::circuit_builder::{CircuitBuilder};
 use plonky2::field::goldilocks_field::GoldilocksField;
 
-
-use plonky2::plonk::circuit_data::CircuitConfig;
-use wasm_bindgen::prelude::*;
-
-#[wasm_bindgen]
-pub fn prove_requirements(
-    board: &[u8],
-    queue: &[u8],
-    requirements: &[u8],
-    secret_moves: &[u8]
-) -> Result<Vec<u8>, JsValue> {
-    let config = CircuitConfig::standard_recursion_config();
-    let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
-
-    let num_pieces = queue.len();
-    let bits_t = deserialize_board(&mut builder);
-    let board_t =bits_to_board(&mut builder, bits_t)
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let queue_t = deserialize_queue(&mut builder, num_pieces);
-    let actions_t = deserialize_actions(&mut builder, num_pieces);
-    let zero = GoldilocksField::ZERO;
-    let one = GoldilocksField::ONE;
-
-    let mut pw = PartialWitness::new();
-    for (i, &byte) in board.iter().enumerate() {
-        if byte == 1 {
-            pw.set_target(bits_t[i], one).map_err(|e| JsValue::from_str(&e.to_string()))?;
-        } else {
-            pw.set_target(bits_t[i], zero).map_err(|e| JsValue::from_str(&e.to_string()))?;
-        }
-    }
-    for (i, &piece) in queue.iter().enumerate() {
-        pw.set_target(queue_t[i], GoldilocksField::from_canonical_u8(piece))
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    }
-    for piece in 0..num_pieces {
-        for act in 0..32 {
-            let index = piece * 32 + act;
-            pw.set_target(actions_t[piece][act], GoldilocksField::from_canonical_u8(secret_moves[index]))
-            .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        }
-    }
-
-
-    let ledger = simulate(&mut builder, board_t, queue_t, actions_t);
-    verify_requirements(&mut builder, requirements, ledger);
-
-    let data = builder.build::<plonky2::plonk::config::PoseidonGoldilocksConfig>();
-    let proof = data.prove(pw)
-    .map_err(|e| JsValue::from_str(&format!("prove failed: {e:#?}")))?;
-
-    Ok(proof.to_bytes())
-}
-
-fn verify_requirements(
+pub fn verify_requirements(
     builder: &mut CircuitBuilder<GoldilocksField, 2>, 
     requirements: &[u8], 
     ledger: LedgerTargets
@@ -79,11 +24,11 @@ fn verify_requirements(
     }
 }
 
-fn deserialize_board(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> [Target;210] {
+pub fn deserialize_board(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> [Target;210] {
     [builder.add_virtual_public_input();210]
 }
 
-fn bits_to_board(builder: &mut CircuitBuilder<GoldilocksField, 2>, bits: [Target;210]) -> Result<BoardTargets, String> {
+pub fn bits_to_board(builder: &mut CircuitBuilder<GoldilocksField, 2>, bits: [Target;210]) -> Result<BoardTargets, String> {
     let mut cells = [builder.zero(); 21];
     let mut const_target;
     let mut column_mask= [builder.zero(); 10];
@@ -101,7 +46,7 @@ fn bits_to_board(builder: &mut CircuitBuilder<GoldilocksField, 2>, bits: [Target
     Ok(BoardTargets { cells: cells })
 }
 
-fn deserialize_queue(builder: &mut CircuitBuilder<GoldilocksField, 2>, queue_length: usize) -> Vec<Target> {
+pub fn deserialize_queue(builder: &mut CircuitBuilder<GoldilocksField, 2>, queue_length: usize) -> Vec<Target> {
     let mut queue_targets = Vec::new();
     for _ in 0..queue_length {
         queue_targets.push(builder.add_virtual_public_input());
@@ -109,7 +54,7 @@ fn deserialize_queue(builder: &mut CircuitBuilder<GoldilocksField, 2>, queue_len
     queue_targets
 }
 
-fn deserialize_actions(builder: &mut CircuitBuilder<GoldilocksField, 2>, queue_length: usize) -> Vec<Vec<Target>>{
+pub fn deserialize_actions(builder: &mut CircuitBuilder<GoldilocksField, 2>, queue_length: usize) -> Vec<Vec<Target>>{
     let mut action_targets = Vec::new();
     for piece in 0..queue_length{
         action_targets.push(Vec::new());
@@ -120,34 +65,7 @@ fn deserialize_actions(builder: &mut CircuitBuilder<GoldilocksField, 2>, queue_l
     action_targets
 }
 
-fn assign_actions(
-    builder: &mut CircuitBuilder<GoldilocksField, 2>, 
-    num_pieces: usize, 
-    actions: &[u8]
-) -> Result<Vec<Vec<Target>>, String> {
-    let mut action_list = Vec::new();
-    let mut action_type = [builder.add_virtual_target(); 6];
-    let mut piece_counter = 0;
-    let mut action_counter = 0;
-
-    for act in 0..6 {
-        action_type[act] = builder.constant(GoldilocksField::from_canonical_usize(act));
-    }
-    while piece_counter < num_pieces {
-        action_list.push(Vec::new());
-        loop {
-            if actions[action_counter] == 5 { break; }
-            action_list[piece_counter].push(action_type[actions[action_counter] as usize]);
-            action_counter += 1;
-        }
-        action_counter += 1;
-        piece_counter += 1;
-    }
-
-    Ok(action_list)
-}
-
-fn simulate(
+pub fn simulate(
     builder: &mut CircuitBuilder<GoldilocksField, 2>, 
     board: BoardTargets, 
     queue: Vec<Target>, 
@@ -388,11 +306,10 @@ impl GameState {
         let (cleared_board, lines_cleared) = placed_board.clear_lines(builder);
 
         let mut attack = builder.zero();
-        let mut clear_constant = builder.zero();
         let mut is = [builder._false(); 5];
         let mut is_ts = [builder._false(); 5];
         for i in 0..5 {
-            clear_constant = builder.constant(GoldilocksField::from_canonical_usize(i));
+            let clear_constant = builder.constant(GoldilocksField::from_canonical_usize(i));
             is[i] = builder.is_equal(clear_constant, lines_cleared);
             is_ts[i] = builder.and(is_tspin, is[i]);
             attack = builder.mul_const_add(GoldilocksField::from_canonical_usize(ATTACK_TABLE[i]), is[i].target, attack);
@@ -434,15 +351,11 @@ impl GameState {
 
 
 #[derive(Debug, Clone, Copy)]
-struct BoardTargets{
+pub struct BoardTargets{
     cells: [Target; 21]
 }
 
 impl BoardTargets{
-
-    fn empty(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> Self {
-        Self { cells: [builder.zero();21] }
-    }
 
     fn out_of_bounds(&self, builder: &mut CircuitBuilder<GoldilocksField, 2>, row: Target, col: Target) -> BoolTarget {
         let zero = builder.zero();
@@ -850,7 +763,7 @@ impl PieceStateTargets{
 }
 
 #[derive(Debug, Clone, Copy)]
-struct LedgerTargets{
+pub struct LedgerTargets{
     tss: Target,
     tsd: Target,
     tst: Target,
@@ -873,35 +786,5 @@ impl LedgerTargets{
             combo: builder.zero(),
             b2b: builder._false(),
         }
-    }
-}
-
-
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_prove_requirements() {
-        // a board you know is valid
-        let board = vec![0u8; 210];
-        
-        // a simple queue, like just T pieces
-        let queue = vec![0u8; 3];  // whatever your piece encoding is
-        
-        // requirements — like 1 tspin minimum
-        let requirements = vec![0u8;6];
-        
-        // a known valid move sequence that achieves those requirements
-        let mut secret_moves = vec![5u8; 3 * 32];  // all no-ops to start
-        // set some real moves for piece 0
-        secret_moves[0] = 2;  // rotate cw
-        secret_moves[1] = 2;  // rotate cw
-        // etc
-        
-        let result = prove_requirements(&board, &queue, &requirements, &secret_moves);
-        assert!(result.is_ok());
     }
 }
