@@ -4,27 +4,28 @@ use plonky2::plonk::circuit_builder::{CircuitBuilder};
 use plonky2::field::goldilocks_field::GoldilocksField;
 
 
-pub fn deserialize_requirements(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> [Target; 6] {
-    [builder.add_virtual_target(); 6]
+pub fn deserialize_requirements(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> [Target; 8] {
+    [builder.add_virtual_target(); 8]
 }
 
 pub fn verify_requirements(
     builder: &mut CircuitBuilder<GoldilocksField, 2>, 
-    requirements: [Target; 6], 
-    ledger: LedgerTargets
+    requirements: [Target; 8], 
+    ledger_struct: LedgerTargets,
 ) {
+    let ledger = ledger_struct.ledger;
     let mut difference = [builder.zero(); 6];
+    let one = builder.one();
 
-    difference[0] = builder.sub(requirements[0], ledger.tss);
-    difference[1] = builder.sub(requirements[1], ledger.tsd);
-    difference[2] = builder.sub(requirements[2], ledger.tst);
-    difference[3] = builder.sub(requirements[3], ledger.tetris);
-    difference[4] = builder.sub(requirements[4], ledger.pc);
-    difference[5] = builder.sub(requirements[5], ledger.attack);
-
-    for req in 0..6 {
-        builder.assert_zero(difference[req]);
+    for i in 0..7 {
+    difference[i] = builder.sub(ledger[i], requirements[i]);
     }
+    for req in 0..7 {
+        builder.range_check(difference[req], 7);
+    }
+    let check_hold = builder.is_equal(requirements[7], one);
+    let hold_bad = builder.mul(check_hold.target, ledger[7]);
+    builder.assert_zero(hold_bad);
 }
 
 pub fn deserialize_board(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> [Target;210] {
@@ -77,26 +78,75 @@ pub fn simulate(
     let mut queue_index = 0;
     let mut board = board;
     let mut ledger = LedgerTargets::empty(builder);
+    let mut held_piece = builder.constant(GoldilocksField::from_canonical_usize(7));
     let tables = Tables::default(builder);
     for piece_actions in &actions {
-        let (piece, _) = PieceStateTargets::spawn(queue[queue_index], builder, board, tables.shapes);
-        let mut game_state = GameState::new(builder, board, piece, ledger);
+        let piece = spawn(board,queue[queue_index],
+        queue[queue_index+1], held_piece, builder, tables.shapes);
+
+        let mut game_state = GameState::new(builder, board, piece, 
+        queue[queue_index+1],ledger);
+
         for action in piece_actions {
             game_state = game_state.apply_movement(builder, *action, tables);
         }
         game_state = game_state.lock_piece(builder, tables.combo);
         board = game_state.board;
         ledger = game_state.ledger;
+        held_piece = game_state.held_piece;
         queue_index += 1;
     }
     ledger
 }
+
+fn spawn(
+    board: BoardTargets,
+    current_piece: Target, 
+    next_piece: Target,
+    held_piece: Target,
+    builder: &mut CircuitBuilder<GoldilocksField, 2>, 
+    shape_table: usize
+) -> PieceStateTargets {
+    let zero = builder.zero();
+    let one = builder.one();
+    let null_target = builder.constant(GoldilocksField::from_canonical_usize(7));
+
+    let hold_null = builder.is_equal(held_piece, null_target);
+    let held_true = builder.not(hold_null);
+    let current_null = builder.is_equal(current_piece, null_target);
+    let both_null = builder.and(hold_null, current_null);
+
+    let mut letter = builder.select(held_true, current_piece, next_piece);
+    letter = builder.select(current_null, held_piece, letter);
+    letter = builder.select(both_null, one, letter);
+
+    let is_one = builder.is_equal(letter, one);
+    let fourteen = builder.constant(GoldilocksField::from_canonical_usize(14));
+    let thirteen = builder.constant(GoldilocksField::from_canonical_usize(13));
+
+    let piece_shape = get_shape(builder, letter, zero, shape_table);
+    let piece_state = PieceStateTargets{ 
+        piece: letter, 
+        rotation: zero, 
+        shape: piece_shape,
+        row: zero,
+        col: builder.select(is_one,fourteen, thirteen),
+    };
+
+    let no_collisions = board.no_collision(builder, piece_shape, piece_state.row, piece_state.col).target;
+    let game_okay = builder.select(both_null, one, no_collisions);
+    builder.assert_one(game_okay);
+
+    piece_state
+}
+
 
 #[derive(Debug, Clone, Copy)]
 struct Tables {
     shapes: usize,
     kicks: usize,
     combo: usize,
+    geq: usize,
 }
 
 impl Tables {
@@ -105,8 +155,22 @@ impl Tables {
             shapes: construct_shapes(builder),
             kicks: construct_kicks(builder),
             combo: construct_combo(builder),
+            geq: construct_geq(builder),
         }
     }
+}
+
+fn construct_geq(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> usize {
+    let mut input = Vec::new();
+    let mut output = Vec::new();
+    for a in 0..=25 {
+        for b in 0..=25 {
+            let index = 25 * a + b as u16;
+            input.push(index);
+            if a >= b { output.push(1 as u16); } else {output.push(0 as u16);}
+        }
+    }
+    builder.add_lookup_table_from_table(&input, &output)
 }
 
 fn construct_combo(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> usize {
@@ -182,6 +246,8 @@ fn get_shape(
 }
 
 
+
+
 fn col_to_mask(
     builder: &mut CircuitBuilder<GoldilocksField, 2>,
     col: Target,
@@ -220,12 +286,14 @@ fn select_piece_state(
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct GameState {
     board: BoardTargets,
     current_piece: PieceStateTargets,
     last_action_was_rotation: BoolTarget,
     ledger: LedgerTargets,
+    held_piece: Target,
+    next_piece: Target,
 }
 
 impl GameState {
@@ -233,13 +301,17 @@ impl GameState {
         builder: &mut CircuitBuilder<GoldilocksField, 2>, 
         board: BoardTargets, 
         piece: PieceStateTargets,
+        next_piece: Target,
         ledger: LedgerTargets
     ) -> Self{
         GameState { 
             board: board,  
             current_piece: piece, 
             last_action_was_rotation: builder._false(), 
-            ledger: ledger}
+            ledger: ledger,
+            held_piece: builder.constant(GoldilocksField::from_canonical_usize(7)),
+            next_piece: next_piece,
+        }
     }
 
     fn apply_movement(
@@ -248,15 +320,16 @@ impl GameState {
         action: Target, // left right cw ccw sd
         tables: Tables
     ) -> Self{
-        let current_piece = self.current_piece;
-        let board = self.board;
-        let mut last_action_rotate = self.last_action_was_rotation;
-
         let zero = builder.zero();
         let one = builder.one();
         let two = builder.constant(GoldilocksField::from_canonical_usize(2));
         let three = builder.constant(GoldilocksField::from_canonical_usize(3));
         let four = builder.constant(GoldilocksField::from_canonical_usize(4));
+        let five = builder.constant(GoldilocksField::from_canonical_usize(5));
+
+        let current_piece = self.current_piece;
+        let board = self.board;
+        let mut last_action_rotate = self.last_action_was_rotation;
 
         let is_left = builder.is_equal(zero,action);
         let is_right = builder.is_equal(action, one);
@@ -265,11 +338,12 @@ impl GameState {
         let is_ccw = builder.is_equal(action, three);
         let is_rotate = builder.or(is_ccw, is_cw);
         let is_sd = builder.is_equal(action, four);
+        let is_hold = builder.is_equal(action, five);
 
         let (shifted_piece, shift_ok) = current_piece.shift(builder, board, is_right);
         let (sd_piece,sd_ok) = current_piece.soft_drop(builder, board);
         let (rotated_piece, rotate_ok) = current_piece.rotate(builder, board, is_cw, tables);
-
+        let (swapped_piece, piece_in_hold) = self.use_hold(builder, tables.shapes);
 
         let shifted = builder.and(is_shift,shift_ok);
         let didnt_shift = builder.not(shifted);
@@ -285,25 +359,29 @@ impl GameState {
         adjusted_piece = select_piece_state(builder, is_shift, shifted_piece, adjusted_piece);
         adjusted_piece = select_piece_state(builder, rotated, rotated_piece, adjusted_piece);
         adjusted_piece = select_piece_state(builder, is_sd, sd_piece, adjusted_piece);
-
+        adjusted_piece = select_piece_state(builder, is_hold, swapped_piece, adjusted_piece);
 
         GameState { 
             board: board, 
             current_piece: adjusted_piece, 
             last_action_was_rotation: last_action_rotate, 
-            ledger: self.ledger
+            ledger: self.ledger,
+            held_piece: builder.select(is_hold, piece_in_hold, self.held_piece),
+            next_piece: self.next_piece,
         }
     }
 
 
-    fn lock_piece(&self, builder: &mut CircuitBuilder<GoldilocksField, 2>, combo_table: usize) -> GameState {
+    fn lock_piece(&self, builder: &mut CircuitBuilder<GoldilocksField, 2>, combo_table: usize, geq_table: usize) -> GameState {
         let board = self.board;
         let (adjusted_piece, droppable) = self.current_piece.hard_drop(builder, board);
         let not_droppable = builder.not(droppable);
         let last_action_rotate = builder.and(self.last_action_was_rotation, not_droppable);
-        let old_ledger = self.ledger;
+        let old_ledger = self.ledger.ledger;
         let three_corners = adjusted_piece.three_corners(builder, board);
         let is_tspin = builder.and(three_corners, last_action_rotate);
+        let twenty_five = builder.constant(GoldilocksField::from_canonical_usize(25));
+        let seven = builder.constant(GoldilocksField::from_canonical_usize(7));
 
         let placed_board = board.place(builder, adjusted_piece);
         let (cleared_board, lines_cleared) = placed_board.clear_lines(builder);
@@ -320,34 +398,69 @@ impl GameState {
         }
 
         let keep_b2b = builder.or(is[4], is_tspin);
-        attack = builder.mul_add(keep_b2b.target, old_ledger.b2b.target, attack);
+        attack = builder.mul_add(keep_b2b.target, old_ledger[9], attack);
 
         let is_pc = cleared_board.check_empty(builder);
         let ten = builder.constant(GoldilocksField::from_canonical_usize(10));
         attack = builder.mul_add(is_pc.target, ten, attack);
         
         let add_combo = builder.not(is[0]);
-        let combo_attack = builder.add_lookup_from_index(old_ledger.combo, combo_table);
+        let combo_attack = builder.add_lookup_from_index(old_ledger[8], combo_table);
         attack = builder.mul_add(add_combo.target, combo_attack, attack);
 
+        let new_combo = builder.mul_add(old_ledger[8], add_combo.target, add_combo.target);
+        let combo_index = builder.mul_add(new_combo, twenty_five, old_ledger[6]);
+        let is_max_combo = builder.add_lookup_from_index(combo_index, geq_table);
 
-        let new_ledger = LedgerTargets{
-            tss: builder.add(old_ledger.tss, is_ts[1].target),
-            tsd: builder.add(old_ledger.tsd, is_ts[2].target),
-            tst: builder.add(old_ledger.tst, is_ts[3].target),
-            tetris: builder.add(old_ledger.tetris, is[4].target),
-            pc: builder.add(old_ledger.pc, is_pc.target),
-            attack: builder.add(old_ledger.attack, attack),
-            combo: builder.mul_add(old_ledger.combo, add_combo.target, add_combo.target),
-            b2b: keep_b2b
+        let held_null = builder.is_equal(self.held_piece, seven);
+
+        let new_ledger = LedgerTargets{ ledger:
+            [
+                builder.add(old_ledger[0], is_ts[1].target),
+                builder.add(old_ledger[1], is_ts[2].target),
+                builder.add(old_ledger[2], is_ts[3].target),
+                builder.add(old_ledger[3], is[4].target),
+                builder.add(old_ledger[4], is_pc.target),
+                builder.add(old_ledger[5], attack),
+                builder.select(BoolTarget::new_unsafe(is_max_combo), new_combo, old_ledger[6]),
+                builder.or(BoolTarget::new_unsafe(old_ledger[7]), held_null).target,
+                new_combo,
+                keep_b2b.target
+            ]
         };
 
         GameState { 
             board: cleared_board, 
             current_piece: adjusted_piece, 
             last_action_was_rotation: builder._false(), 
-            ledger: new_ledger 
+            ledger: new_ledger,
+            held_piece: self.held_piece,
+            next_piece: self.next_piece,
         }
+    }
+
+    fn use_hold(&self, 
+        builder: &mut CircuitBuilder<GoldilocksField, 2>, 
+        shape_table: usize 
+    ) -> (PieceStateTargets, Target) {
+        let null_target = builder.constant(GoldilocksField::from_canonical_usize(7));
+        let hold_target = self.held_piece;
+        let next_target = self.next_piece;
+        let hold_null = builder.is_equal(null_target, hold_target);
+        let target_to_spawn = builder.select(hold_null, next_target, hold_target);
+        let spawned_piece = spawn(
+            self.board,
+            target_to_spawn, 
+            null_target, 
+            null_target, 
+            builder, 
+            shape_table
+        );
+
+        (
+            spawned_piece,
+            builder.select(hold_null, next_target, self.current_piece.piece) 
+        )
     }
 
 }
@@ -580,39 +693,6 @@ struct PieceStateTargets{
 }
 
 impl PieceStateTargets{
-
-    fn spawn(
-        letter: Target, 
-        builder: &mut CircuitBuilder<GoldilocksField, 2>, 
-        board: BoardTargets, 
-        shape_table: usize
-    ) -> (Self, BoolTarget) {
-
-        let zero = builder.zero();
-        let one = builder.one();
-        // let seven = builder.constant(GoldilocksField::from_canonical_usize(7));
-        // let is_seven = builder.is_equal(letter, seven);
-        // builder.range_check(letter, 3);
-        // builder.assert_zero(is_seven.target);
-
-        let is_one = builder.is_equal(letter, one);
-        let fourteen = builder.constant(GoldilocksField::from_canonical_usize(14));
-        let thirteen = builder.constant(GoldilocksField::from_canonical_usize(13));
-
-        let piece_shape = get_shape(builder, letter, zero, shape_table);
-        let piece_state = PieceStateTargets{ 
-            piece: letter, 
-            rotation: zero, 
-            shape: piece_shape,
-            row: zero,
-            col: builder.select(is_one,fourteen, thirteen)
-        };
-
-        let game_okay = board.no_collision(builder, piece_shape, piece_state.row, piece_state.col);
-
-        (piece_state, game_okay)
-    }
-
     fn shift(
         &self, 
         builder: &mut CircuitBuilder<GoldilocksField, 2>, 
@@ -630,7 +710,7 @@ impl PieceStateTargets{
             rotation: self.rotation, 
             shape: shape,
             row: self.row, 
-            col: builder.select(shiftable, new_col, self.col) 
+            col: builder.select(shiftable, new_col, self.col),
         },
         shiftable)
     }
@@ -647,7 +727,7 @@ impl PieceStateTargets{
                 rotation: self.rotation, 
                 shape: shape,
                 row: builder.add(self.row, shiftable.target),
-                col: self.col
+                col: self.col,
             },
             shiftable
         )
@@ -733,7 +813,16 @@ impl PieceStateTargets{
         }
         
         let final_rotation = builder.select(found, target_rotation, initial_rotation);
-        (PieceStateTargets { piece: self.piece, rotation: final_rotation, shape: shape_coord, row: final_row, col: final_col }, found)
+        (
+            PieceStateTargets { 
+                piece: self.piece, 
+                rotation: final_rotation, 
+                shape: shape_coord, 
+                row: final_row, 
+                col: final_col,
+            }, 
+            found
+        )
     }
 
     fn three_corners(&self, builder:&mut CircuitBuilder<GoldilocksField, 2>, board: BoardTargets) -> BoolTarget {
@@ -767,27 +856,11 @@ impl PieceStateTargets{
 
 #[derive(Debug, Clone, Copy)]
 pub struct LedgerTargets{
-    tss: Target,
-    tsd: Target,
-    tst: Target,
-    tetris: Target,
-    pc: Target,
-    attack: Target,
-    combo: Target,
-    b2b: BoolTarget,
+    ledger: [Target; 10], //tss, tsd, tst, tetris, pc, attack, max_combo, held, combo, b2b
 }
 
 impl LedgerTargets{
     fn empty(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> Self{
-        Self { 
-            tss: builder.zero(), 
-            tsd: builder.zero(), 
-            tst: builder.zero(), 
-            tetris: builder.zero(), 
-            pc: builder.zero(),
-            attack: builder.zero(),
-            combo: builder.zero(),
-            b2b: builder._false(),
-        }
+        LedgerTargets{ ledger; [builder.zero(); 10] }
     }
 }
