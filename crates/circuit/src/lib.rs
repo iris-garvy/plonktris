@@ -2,10 +2,55 @@ use plonky2::field::types::{Field};
 use plonky2::iop::target::{BoolTarget, Target};
 use plonky2::plonk::circuit_builder::{CircuitBuilder};
 use plonky2::field::goldilocks_field::GoldilocksField;
+use plonky2::plonk::circuit_data::CircuitConfig;
+use plonky2::iop::witness::{PartialWitness, WitnessWrite};
+use plonky2::plonk::config::PoseidonGoldilocksConfig;
 
+pub fn generate_proof(board: &Vec<u8>, queue: &Vec<u8>, requirements: &Vec<u8>, secret_moves: &Vec<u8>) -> Result<Vec<u8>,String> {
+    let config = CircuitConfig::standard_recursion_config();
+    let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
+
+    let num_pieces = queue.len();
+    let bits_t = deserialize_board(&mut builder);
+    let board_t = bits_to_board(&mut builder, bits_t).unwrap();
+    let queue_t = deserialize_queue(&mut builder, num_pieces + 1); //for hold sentinel
+    let req_t = deserialize_requirements(&mut builder);
+    let actions_t = deserialize_actions(&mut builder, num_pieces);
+
+    let mut pw = PartialWitness::new();
+
+    for (i, &byte) in board.iter().enumerate() {
+        pw.set_target(bits_t[i], GoldilocksField::from_canonical_u8(byte)).unwrap();
+    }
+
+    for (i, &piece) in queue.iter().enumerate() {
+        pw.set_target(queue_t[i], GoldilocksField::from_canonical_u8(piece)).unwrap();
+    }
+    pw.set_target(queue_t[num_pieces],GoldilocksField::from_canonical_usize(7)).unwrap();
+
+    for (i, &req) in requirements.iter().enumerate() {
+        pw.set_target(req_t[i], GoldilocksField::from_canonical_u8(req)).unwrap();
+    }
+
+    for piece in 0..num_pieces {
+        for act in 0..32 {
+            let index = piece * 32 + act;
+            pw.set_target(actions_t[piece][act], GoldilocksField::from_canonical_u8(secret_moves[index])).unwrap();
+        }
+    }
+
+    let ledger = simulate(&mut builder, board_t, &queue_t, &actions_t);
+    verify_requirements(&mut builder, req_t, ledger);
+
+    let data = builder.build::<PoseidonGoldilocksConfig>();
+    let proof = data.prove(pw).map_err(|e| e.to_string())?;
+    let proof_bytes = proof.to_bytes();
+    eprintln!("num public inputs: {}", data.common.num_public_inputs);
+    Ok(proof_bytes)
+}
 
 pub fn deserialize_requirements(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> [Target; 8] {
-    [builder.add_virtual_target(); 8]
+    builder.add_virtual_public_input_arr()
 }
 
 pub fn verify_requirements(
@@ -14,7 +59,7 @@ pub fn verify_requirements(
     ledger_struct: LedgerTargets,
 ) {
     let ledger = ledger_struct.ledger;
-    let mut difference = [builder.zero(); 6];
+    let mut difference = [builder.zero(); 7];
     let one = builder.one();
 
     for i in 0..7 {
@@ -29,7 +74,7 @@ pub fn verify_requirements(
 }
 
 pub fn deserialize_board(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> [Target;210] {
-    [builder.add_virtual_public_input();210]
+    builder.add_virtual_public_input_arr()
 }
 
 pub fn bits_to_board(builder: &mut CircuitBuilder<GoldilocksField, 2>, bits: [Target;210]) -> Result<BoardTargets, String> {
@@ -72,25 +117,27 @@ pub fn deserialize_actions(builder: &mut CircuitBuilder<GoldilocksField, 2>, que
 pub fn simulate(
     builder: &mut CircuitBuilder<GoldilocksField, 2>, 
     board: BoardTargets, 
-    queue: Vec<Target>, 
-    actions: Vec<Vec<Target>>
+    queue: &Vec<Target>, 
+    actions: &Vec<Vec<Target>>
 ) -> LedgerTargets {
     let mut queue_index = 0;
     let mut board = board;
     let mut ledger = LedgerTargets::empty(builder);
     let mut held_piece = builder.constant(GoldilocksField::from_canonical_usize(7));
     let tables = Tables::default(builder);
-    for piece_actions in &actions {
+    let num_possible_pieces = queue.len() - 1;
+
+    while queue_index < num_possible_pieces {
         let piece = spawn(board,queue[queue_index],
         queue[queue_index+1], held_piece, builder, tables.shapes);
 
         let mut game_state = GameState::new(builder, board, piece, 
-        queue[queue_index+1],ledger);
+        queue[queue_index+1], held_piece, ledger);
 
-        for action in piece_actions {
+        for action in &actions[queue_index] {
             game_state = game_state.apply_movement(builder, *action, tables);
         }
-        game_state = game_state.lock_piece(builder, tables.combo);
+        game_state = game_state.lock_piece(builder, tables.combo, tables.geq);
         board = game_state.board;
         ledger = game_state.ledger;
         held_piece = game_state.held_piece;
@@ -112,11 +159,10 @@ fn spawn(
     let null_target = builder.constant(GoldilocksField::from_canonical_usize(7));
 
     let hold_null = builder.is_equal(held_piece, null_target);
-    let held_true = builder.not(hold_null);
     let current_null = builder.is_equal(current_piece, null_target);
     let both_null = builder.and(hold_null, current_null);
 
-    let mut letter = builder.select(held_true, current_piece, next_piece);
+    let mut letter = builder.select(hold_null, current_piece, next_piece);
     letter = builder.select(current_null, held_piece, letter);
     letter = builder.select(both_null, one, letter);
 
@@ -165,7 +211,7 @@ fn construct_geq(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> usize {
     let mut output = Vec::new();
     for a in 0..=25 {
         for b in 0..=25 {
-            let index = 25 * a + b as u16;
+            let index = 26 * a + b as u16;
             input.push(index);
             if a >= b { output.push(1 as u16); } else {output.push(0 as u16);}
         }
@@ -204,7 +250,7 @@ fn construct_kicks(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> usize {
 fn construct_shapes(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> usize {
     let mut input = Vec::new();
     let mut output = Vec::new();
-    for p in 0..7{
+    for p in 0..8{
         for r in 0..4 {
             for b in 0..4 {
                 for a in 0..2 {
@@ -302,6 +348,7 @@ impl GameState {
         board: BoardTargets, 
         piece: PieceStateTargets,
         next_piece: Target,
+        held_piece: Target,
         ledger: LedgerTargets
     ) -> Self{
         GameState { 
@@ -309,7 +356,7 @@ impl GameState {
             current_piece: piece, 
             last_action_was_rotation: builder._false(), 
             ledger: ledger,
-            held_piece: builder.constant(GoldilocksField::from_canonical_usize(7)),
+            held_piece: held_piece,
             next_piece: next_piece,
         }
     }
@@ -317,7 +364,7 @@ impl GameState {
     fn apply_movement(
         &self, 
         builder: &mut CircuitBuilder<GoldilocksField, 2>, 
-        action: Target, // left right cw ccw sd
+        action: Target, // left right cw ccw sd hold
         tables: Tables
     ) -> Self{
         let zero = builder.zero();
@@ -412,7 +459,8 @@ impl GameState {
         let combo_index = builder.mul_add(new_combo, twenty_five, old_ledger[6]);
         let is_max_combo = builder.add_lookup_from_index(combo_index, geq_table);
 
-        let held_null = builder.is_equal(self.held_piece, seven);
+        let hold_empty = builder.is_equal(self.held_piece, seven);
+        let always_empty = builder.and(hold_empty, BoolTarget::new_unsafe(old_ledger[7]));
 
         let new_ledger = LedgerTargets{ ledger:
             [
@@ -423,7 +471,7 @@ impl GameState {
                 builder.add(old_ledger[4], is_pc.target),
                 builder.add(old_ledger[5], attack),
                 builder.select(BoolTarget::new_unsafe(is_max_combo), new_combo, old_ledger[6]),
-                builder.or(BoolTarget::new_unsafe(old_ledger[7]), held_null).target,
+                always_empty.target,
                 new_combo,
                 keep_b2b.target
             ]
@@ -443,23 +491,30 @@ impl GameState {
         builder: &mut CircuitBuilder<GoldilocksField, 2>, 
         shape_table: usize 
     ) -> (PieceStateTargets, Target) {
+        let zero = builder.zero();
+        let one = builder.one();
+        let thirteen = builder.constant(GoldilocksField(13));
+        let fourteen = builder.constant(GoldilocksField(14));
         let null_target = builder.constant(GoldilocksField::from_canonical_usize(7));
         let hold_target = self.held_piece;
         let next_target = self.next_piece;
         let hold_null = builder.is_equal(null_target, hold_target);
         let target_to_spawn = builder.select(hold_null, next_target, hold_target);
-        let spawned_piece = spawn(
-            self.board,
-            target_to_spawn, 
-            null_target, 
-            null_target, 
-            builder, 
-            shape_table
-        );
+        let o_to_spawn = builder.is_equal(target_to_spawn, one);
+        let spawned_piece = PieceStateTargets{
+            piece: target_to_spawn,
+            rotation: zero,
+            shape: get_shape(builder, target_to_spawn, zero, shape_table),
+            row: zero,
+            col: builder.select(o_to_spawn, fourteen, thirteen),
+        };
+
+        let game_okay = self.board.no_collision(builder, spawned_piece.shape, zero, spawned_piece.col);
+        builder.assert_one(game_okay.target);
 
         (
             spawned_piece,
-            builder.select(hold_null, next_target, self.current_piece.piece) 
+            self.current_piece.piece
         )
     }
 
@@ -524,13 +579,10 @@ impl BoardTargets{
 
     fn no_collision(&self, builder:&mut CircuitBuilder<GoldilocksField, 2>, shape: [[Target;2];4], row: Target, col: Target) -> BoolTarget {
         let mut any_collision = builder._false();
-        let zero = builder.zero();
-        let fresh_row = builder.add(row, zero);
-        let fresh_col = builder.add(col, zero);
 
         for block in 0..4 {
-            let piece_row = builder.add(fresh_row,shape[block][1]); // these are flipped because 
-            let piece_col = builder.add(fresh_col,shape[block][0]); // in the table they're x and y
+            let piece_row = builder.add(row,shape[block][1]); // these are flipped because 
+            let piece_col = builder.add(col,shape[block][0]); // in the table they're x and y
 
             let collision = self.block_collision(builder, piece_row, piece_col);
             any_collision = builder.or(any_collision, collision);
@@ -610,7 +662,7 @@ const TSPIN_REWARD: [usize; 5] = [0, 2, 3, 4, 0];
 const COMBO_TABLE: [usize; 25] = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5];
 
 
-const PIECE_SHAPE: [[[[u32; 2]; 4]; 4]; 7] = [
+const PIECE_SHAPE: [[[[u32; 2]; 4]; 4]; 8] = [
     [ // I piece
         [[0, 1], [1, 1], [2, 1], [3, 1]],
         [[2, 0], [2, 1], [2, 2], [2, 3]],
@@ -659,6 +711,13 @@ const PIECE_SHAPE: [[[[u32; 2]; 4]; 4]; 7] = [
         [[0, 1], [1, 1], [2, 1], [2, 2]],
         [[1, 0], [1, 1], [0, 2], [1, 2]],
     ],
+        [ // null piece
+        [[0, 0], [1, 0], [0, 1], [1, 1]],
+        [[0, 0], [1, 0], [0, 1], [1, 1]],
+        [[0, 0], [1, 0], [0, 1], [1, 1]],
+        [[0, 0], [1, 0], [0, 1], [1, 1]],
+    ],
+
 ];
 
 
@@ -861,6 +920,6 @@ pub struct LedgerTargets{
 
 impl LedgerTargets{
     fn empty(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> Self{
-        LedgerTargets{ ledger; [builder.zero(); 10] }
+        LedgerTargets{ ledger: [builder.zero(); 10] }
     }
 }

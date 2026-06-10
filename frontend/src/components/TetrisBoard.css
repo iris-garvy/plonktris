@@ -1,0 +1,208 @@
+.tetris-board-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+/* ── Board column: toolbar sits exactly over the grid ── */
+.board-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: max-content;
+}
+
+/* ── Toolbar (fixed height, identical in both modes) ── */
+.board-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.paint-palette {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.ctrl-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-right: 2px;
+}
+
+.palette-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  box-sizing: border-box;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.1s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.palette-swatch:hover  { transform: scale(1.2); }
+.palette-swatch.active { border-color: var(--pink); transform: scale(1.1); }
+.palette-swatch.eraser {
+  background: var(--bg-base);
+  border-color: var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.palette-swatch.eraser.active { border-color: var(--pink); color: var(--pink); }
+
+.place-controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.piece-select-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--piece-color, var(--pink));
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.piece-select-btn:hover  { border-color: var(--piece-color, var(--pink)); }
+.piece-select-btn.active { border-color: var(--piece-color, var(--pink)); background: rgba(255,255,255,0.05); }
+
+.rotate-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.rotate-btn:hover { color: var(--pink); border-color: var(--pink); }
+
+.board-actions { margin-left: auto; }
+
+.action-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 3px 8px;
+  font-family: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.action-btn:hover       { color: var(--pink); border-color: var(--pink); }
+.action-btn.danger:hover { color: #ff6a8a; border-color: #ff6a8a; }
+
+/* ── Board layout: hold | grid ── */
+.board-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.board-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 80px;
+  flex-shrink: 0;
+  padding-top: 48px; /* toolbar height + gap, aligns HOLD with grid top */
+}
+
+.side-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.hold-box {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+}
+
+/* ── Grid ── */
+.tetris-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 26px);
+  grid-template-rows: repeat(21, 26px);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  cursor: crosshair;
+}
+
+.cell {
+  width: 26px;
+  height: 26px;
+  box-sizing: border-box;
+  border-right: 1px solid rgba(255, 255, 255, 0.09);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.cell:hover { background: rgba(255, 189, 222, 0.05); }
+
+.cell.filled {
+  background: var(--cell-color);
+  border-color: color-mix(in srgb, var(--cell-color) 60%, white);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--cell-color) 50%, white 50%),
+    inset 0 -1px 0 color-mix(in srgb, var(--cell-color) 50%, black 50%);
+}
+
+.cell.preview-valid {
+  background: color-mix(in srgb, var(--preview-color) 25%, transparent);
+  border-color: color-mix(in srgb, var(--preview-color) 55%, transparent);
+}
+.cell.active-piece {
+  background: var(--active-color);
+  border-color: color-mix(in srgb, var(--active-color) 60%, white);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--active-color) 50%, white 50%),
+    inset 0 -1px 0 color-mix(in srgb, var(--active-color) 50%, black 50%);
+}
+
+.cell.ghost-edit {
+  background: transparent;
+  border: 1px dashed var(--ghost-color);
+  opacity: 0.3;
+}
+
+.cell.preview-invalid {
+  background: rgba(255, 80, 100, 0.1);
+  border-color: rgba(255, 80, 100, 0.3);
+}
+
+/* ── Piece mini ── */
+.piece-mini       { flex-shrink: 0; }
+.piece-mini-empty {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.mini-cell        { border-radius: 1px; }
+.mini-cell.off    { background: transparent; }

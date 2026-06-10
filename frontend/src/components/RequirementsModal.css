@@ -1,0 +1,48 @@
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-panel {
+  width: 250px;
+  background: var(--bg-base);
+  border: 1px solid var(--pink);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.modal-btn {
+  flex: 1;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 8px;
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.modal-btn.cancel {
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.modal-btn.cancel:hover { border-color: var(--text-dim); color: var(--text-dim); }
+
+.modal-btn.submit {
+  border: 1px solid var(--pink);
+  color: var(--pink);
+}
+.modal-btn.submit:hover { background: rgba(255, 189, 222, 0.1); }

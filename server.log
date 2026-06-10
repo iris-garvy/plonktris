@@ -1,0 +1,54 @@
+warning: /Users/iris/ZKP/plonktris/Cargo.toml: unused manifest key: workspace.name
+   Compiling plonktris-server v0.1.0 (/Users/iris/ZKP/plonktris/crates/server)
+warning: variable does not need to be mutable
+  --> crates/server/src/main.rs:77:9
+   |
+77 |     let mut req_counter = 0;
+   |         ----^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `req_counter`
+  --> crates/server/src/main.rs:77:9
+   |
+77 |     let mut req_counter = 0;
+   |         ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_req_counter`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `plonktris-server` (bin "plonktris-server") generated 2 warnings (run `cargo fix --bin "plonktris-server" -p plonktris-server` to apply 2 suggestions)
+    Finished `release` profile [optimized] target(s) in 5.60s
+warning: the following packages contain code that will be rejected by a future version of Rust: sqlx-postgres v0.7.4
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running `target/release/plonktris-server`
+loading verifiers...
+verifier 1 digest: HashOut { elements: [14443636524756734977, 1739847700381760678, 17778609426436987978, 1203834241071140985] }
+verifier 2 digest: HashOut { elements: [14876722922224826709, 75104928417806031, 5393494594312514843, 7523708118485484761] }
+verifier 3 digest: HashOut { elements: [6602230970216302560, 1581681366612910785, 1410144944473339716, 15524641673636731516] }
+verifier 4 digest: HashOut { elements: [1761525802611126946, 13129117960758113674, 17728652810260047056, 17083773279115628636] }
+verifier 5 digest: HashOut { elements: [16803405249164511277, 8773899471847516007, 17362125050232855906, 2485687252299810939] }
+verifier 6 digest: HashOut { elements: [17990430406247259898, 1301413709881503825, 15951738746238644785, 17850499738320160409] }
+verifier 7 digest: HashOut { elements: [18149422635944183527, 9516908056540238795, 8661366029817362402, 266932389839752791] }
+verifier 8 digest: HashOut { elements: [1183049778593628965, 6236980485299373095, 10645166994697388608, 9603913923674161922] }
+verifier 9 digest: HashOut { elements: [16540017139697732470, 2812200065835413800, 2114905325630111833, 9557742388427762898] }
+verifier 10 digest: HashOut { elements: [4595910168207005873, 6704684214965056797, 9869797581385616008, 7966004503676368628] }
+verifier 11 digest: HashOut { elements: [486268546255837793, 819293595349539079, 13006590430371987421, 17043869555184836037] }
+verifier 12 digest: HashOut { elements: [1222260102672256178, 6952718407791112068, 11453317850175657156, 15010440535562037877] }
+verifier 13 digest: HashOut { elements: [11170621524975059215, 7098742924316439753, 15167473068099037070, 9242801052102808431] }
+verifier 14 digest: HashOut { elements: [10399070632406311238, 10206794746558272913, 10017229203639497081, 13018855155199418174] }
+verifier 15 digest: HashOut { elements: [9957168528466441755, 318796281435393655, 5106646458272541129, 4891054980822484438] }
+verifier 16 digest: HashOut { elements: [12310042455867368298, 1732130697097709422, 629661791070911481, 6814292144315807356] }
+verifier 17 digest: HashOut { elements: [6705821169415155594, 17386073482776007327, 13148339288969748252, 11210418780150114754] }
+verifier 18 digest: HashOut { elements: [3403359921631515152, 4060361903324786340, 7997651640869787881, 3159725634913258196] }
+verifier 19 digest: HashOut { elements: [6537655103345540490, 5489125283743472144, 7016170932711491118, 13557671964652008168] }
+verifier 20 digest: HashOut { elements: [16126930125601431086, 1539826764193895518, 1244897670545329978, 6338402253189106555] }
+verifier 21 digest: HashOut { elements: [83930388378271584, 6858312823603769025, 12065723936232256404, 15522491791354103841] }
+verifier 22 digest: HashOut { elements: [11328746236226924466, 10612999218888017978, 12894277786892430805, 738934815079616473] }
+verifier 23 digest: HashOut { elements: [16401340986167907411, 1691266422026873260, 9627532804582190660, 9169714360255828050] }
+verifier 24 digest: HashOut { elements: [13179858552445259679, 13623999065601226767, 11933166887522640089, 1565507741200099770] }
+verifier 25 digest: HashOut { elements: [5352730845129838552, 812044453664447271, 16316960226768913438, 18192201124142906863] }
+ready!
+listening on port 3000
+num public inputs: 224

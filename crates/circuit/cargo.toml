@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-plonky2 = { version = "1.1", default-features = false }
+plonky2 = { version = "1.1" }

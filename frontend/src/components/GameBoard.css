@@ -1,0 +1,75 @@
+.game-board-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+/* Same fixed height as .board-toolbar so grids stay vertically aligned */
+.game-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.req-summary {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--pink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Reuses .board-layout, .board-side-panel, .hold-box from TetrisBoard.css */
+
+/* Play grid — identical sizing to edit grid */
+.play-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 26px);
+  grid-template-rows: repeat(21, 26px);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+}
+
+.play-grid .cell {
+  width: 26px;
+  height: 26px;
+  box-sizing: border-box;
+  border-right: 1px solid rgba(255, 255, 255, 0.09);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.play-grid .cell.filled {
+  background: var(--cell-color);
+  border-color: color-mix(in srgb, var(--cell-color) 60%, white);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--cell-color) 50%, white 50%),
+    inset 0 -1px 0 color-mix(in srgb, var(--cell-color) 50%, black 50%);
+}
+
+.play-grid .cell.active-piece {
+  background: var(--active-color);
+  border-color: color-mix(in srgb, var(--active-color) 60%, white);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--active-color) 40%, transparent);
+}
+
+.play-grid .cell.ghost-piece {
+  background: transparent;
+  border: 1px dashed var(--ghost-color);
+  opacity: 0.3;
+}
+
+/* Piece mini */
+.piece-mini       { flex-shrink: 0; }
+.piece-mini-empty { background: var(--bg-raised); border: 1px solid var(--border); flex-shrink: 0; }
+.mini-cell        { border-radius: 1px; }
+.mini-cell.off    { background: transparent; }

@@ -1,0 +1,87 @@
+.queue-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 80px;   /* one column: textbox, squares, chips all line up */
+  padding-top: 48px; /* toolbar height + gap, flush with grid top */
+}
+
+/* ── Textbox ── */
+.queue-text-input {
+  width: 80px;
+  box-sizing: border-box;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  color: var(--pink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 5px 6px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.queue-text-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.queue-text-input:focus { border-color: var(--pink); }
+.queue-text-input.readonly { pointer-events: none; }
+
+/* ── Queue column: squares + fused overflow ── */
+.queue-column {
+  display: flex;
+  flex-direction: column;
+  width: 80px;
+  gap: 0;
+}
+
+.queue-box {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  box-sizing: border-box;
+}
+
+.queue-box:first-child { border-top: 1px solid var(--border); }
+.queue-box:last-child  { border-bottom: 1px solid var(--border); }
+
+.queue-box.current {
+  border-color: var(--pink);
+  border-bottom: 1px solid var(--pink);
+  background: color-mix(in srgb, var(--pink) 6%, var(--bg-raised));
+}
+.queue-box.current + .queue-box { border-top: none; }
+
+.queue-box.empty { opacity: 0.3; }
+
+/* ── Overflow chips: a queue for the queue ── */
+.queue-overflow {
+  display: flex;
+  flex-wrap: wrap;
+  width: 80px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  box-sizing: border-box;
+  padding: 2px;
+  gap: 2px;
+}
+
+.queue-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--pc);
+  border: 1px solid var(--pc);
+}

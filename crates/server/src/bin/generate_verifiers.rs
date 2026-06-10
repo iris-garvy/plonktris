@@ -17,10 +17,10 @@ fn main() {
 
         let bits_t = deserialize_board(&mut builder);
         let board_t = bits_to_board(&mut builder, bits_t).unwrap();
-        let queue_t = deserialize_queue(&mut builder, num_pieces);
-        let actions_t = deserialize_actions(&mut builder, num_pieces);
+        let queue_t = deserialize_queue(&mut builder, num_pieces + 1);
         let requirements_t = deserialize_requirements(&mut builder);
-        let ledger = simulate(&mut builder, board_t, queue_t, actions_t);
+        let actions_t = deserialize_actions(&mut builder, num_pieces);
+        let ledger = simulate(&mut builder, board_t, &queue_t, &actions_t);
         verify_requirements(&mut builder, requirements_t, ledger);
 
         let data = builder.build::<PoseidonGoldilocksConfig>();

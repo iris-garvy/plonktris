@@ -9,7 +9,10 @@ circuit = { path = "../circuit" }
 axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 sqlx = { version = "0.7", features = ["postgres", "runtime-tokio", "uuid"] }
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", features = ["v4", "serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 plonky2 = { version = "1.1", default-features = false }
+tower-http = { version = "0.5", features = ["cors"] }
+rayon = "1.8"
+num_cpus = "1.16"

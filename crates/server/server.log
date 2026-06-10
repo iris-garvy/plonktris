@@ -1,0 +1,29 @@
+warning: /Users/iris/ZKP/plonktris/Cargo.toml: unused manifest key: workspace.name
+warning: variable does not need to be mutable
+  --> crates/server/src/main.rs:77:9
+   |
+77 |     let mut req_counter = 0;
+   |         ----^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `req_counter`
+  --> crates/server/src/main.rs:77:9
+   |
+77 |     let mut req_counter = 0;
+   |         ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_req_counter`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `plonktris-server` (bin "plonktris-server") generated 2 warnings (run `cargo fix --bin "plonktris-server" -p plonktris-server` to apply 2 suggestions)
+    Finished `release` profile [optimized] target(s) in 0.57s
+warning: the following packages contain code that will be rejected by a future version of Rust: sqlx-postgres v0.7.4
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running `/Users/iris/ZKP/plonktris/target/release/plonktris-server`
+loading verifiers...
+
+thread 'main' (21101787) panicked at crates/server/src/main.rs:297:98:
+called `Result::unwrap()` on an `Err` value: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

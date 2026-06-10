@@ -1,15 +1,62 @@
-import init, { prove_requirements } from "./wasm/wasm.js";
+import init, { initThreadPool, prove_requirements } from "./pkg/wasm.js";
 
-init().then(() => {
+const SERVER_URL = "http://localhost:3000";
+
+let wasmReady = false;
+
+init().then(async () => {
+    await initThreadPool(navigator.hardwareConcurrency);
+    wasmReady = true;
     postMessage({ type: "ready" });
 });
 
-onmessage = function(e) {
-    const { board, queue, requirements, secretMoves } = e.data;
+onmessage = async function(e) {
+    const { id, board, queue, requirements, secretMoves, mode } = e.data;  // <-- destructure id
+
+    if (!wasmReady) {
+        postMessage({ type: "error", id, error: "WASM not ready yet" });
+        return;
+    }
+
     try {
-        const proof = prove_requirements(board, queue, requirements, secretMoves);
-        postMessage({ type: "proof", proof });
+        if (mode === "browser") {
+            const proof = prove_requirements(board, queue, requirements, secretMoves);
+            postMessage({ type: "proof", id, proof });
+        } else if (mode === "server") {
+            const res = await fetch(`${SERVER_URL}/request`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    board: Array.from(board), 
+                    queue: Array.from(queue), 
+                    requirements: Array.from(requirements), 
+                    actions: Array.from(secretMoves) })
+            });
+            if (!res.ok) throw new Error(`submit failed: ${res.statusText}`);
+            const { proof_id } = await res.json();
+
+            const puzzleId = await pollJob(proof_id);
+            postMessage({ type: "proof", id, proof: puzzleId });
+        }
     } catch (err) {
-        postMessage({ type: "error", error: err.message });
+        // JsValue errors from wasm don't have .message, they ARE the message
+        const message = err instanceof Error ? err.message : String(err);
+        postMessage({ type: "error", id, error: message });
     }
 };
+
+async function pollJob(jobId) {
+    while (true) {
+        await sleep(2000);
+        const res = await fetch(`${SERVER_URL}/jobs/${jobId}`);
+        if (!res.ok) throw new Error(`poll failed: ${res.statusText}`);
+        const job = await res.json();
+        console.log("poll:", job);
+        if (job.status === "done") return job.puzzle_id;
+        if (job.status === "failed") throw new Error(`job failed: ${job.failed_reason}`);
+    }
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}

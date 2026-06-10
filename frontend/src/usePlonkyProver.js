@@ -1,15 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-const WASM_MODULE_PATH = "/wasm/wasm.js";
-const PROVE_FN_NAME = "prove_requirements";
-
-let wasmModule = null;
-
 export function usePlonkyProver() {
     const [isReady, setIsReady] = useState(false);
     const [isProving, setIsProving] = useState(false);
     const [error, setError] = useState(null);
+
     const workerRef = useRef(null);
+    const pendingRef = useRef(new Map());
 
     useEffect(() => {
         const worker = new Worker(
@@ -18,8 +15,27 @@ export function usePlonkyProver() {
         );
 
         worker.onmessage = (e) => {
-            if (e.data.type === "ready") {
+            const { type, id, proof, error, } = e.data;
+
+            if (type === "ready") {
                 setIsReady(true);
+                return;
+            }
+
+            const pending = pendingRef.current.get(id);
+            if (!pending) return;
+
+            if (type === "proof") {
+                pending.resolve(proof);
+                pendingRef.current.delete(id);
+                setIsProving(false);
+            }
+
+            if (type === "error") {
+                pending.reject(new Error(error));
+                pendingRef.current.delete(id);
+                setIsProving(false);
+                setError(error);
             }
         };
 
@@ -28,25 +44,26 @@ export function usePlonkyProver() {
         return () => worker.terminate();
     }, []);
 
-    const prove = useCallback((board, queue, requirements, secretMoves) => {
+    const prove = useCallback((board, queue, requirements, secretMoves, mode) => {
+        const id = crypto.randomUUID();
+
+        setIsProving(true);
+        setError(null);
+
         return new Promise((resolve, reject) => {
-            setIsProving(true);
-            setError(null);
+            pendingRef.current.set(id, { resolve, reject });
 
-            workerRef.current.onmessage = (e) => {
-                if (e.data.type === "proof") {
-                    setIsProving(false);
-                    resolve(e.data.proof);
-                } else if (e.data.type === "error") {
-                    setIsProving(false);
-                    setError(e.data.error);
-                    reject(new Error(e.data.error));
-                }
-            };
-
-            workerRef.current.postMessage({ board, queue, requirements, secretMoves });
+            workerRef.current.postMessage({
+                type: "prove",
+                id,
+                board,
+                queue,
+                requirements,
+                secretMoves,
+                mode
+            });
         });
     }, []);
 
-    return {prove, isReady, isProving, error};
+    return { prove, isReady, isProving, error };
 }
