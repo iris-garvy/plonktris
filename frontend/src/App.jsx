@@ -227,22 +227,19 @@ function App() {
 
         <div className="stage-tabs">
           {view === 'create' && (
-            <>
+            stage === 'edit' ? (
               <button
-                className={`stage-tab ${stage === 'edit' ? 'active' : ''}`}
-                onClick={() => stage === 'solve' && handleBackToEdit()}
-              >
-                01 EDIT
-              </button>
-              <span className="stage-sep">→</span>
-              <button
-                className={`stage-tab ${stage === 'solve' ? 'active' : ''}`}
-                onClick={() => stage === 'edit' && handleStartSolving()}
+                className="stage-tab"
+                onClick={handleStartSolving}
                 disabled={queue.length === 0}
               >
-                02 SOLVE
+                ▶ SOLVE
               </button>
-            </>
+            ) : (
+              <button className="stage-tab" onClick={handleBackToEdit}>
+                ← EDIT
+              </button>
+            )
           )}
           {view === 'play' && playPuzzle && (
             <span className="play-title">{playPuzzle.name} · by {playPuzzle.creator ?? 'anonymous'}</span>

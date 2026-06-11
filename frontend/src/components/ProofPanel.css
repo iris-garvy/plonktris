@@ -61,11 +61,11 @@
 
 .proof-error {
   border: 1px solid rgba(255, 100, 130, 0.4);
-  background: #120508;
+  background: #fdeef3;
   padding: 7px 9px;
 }
-.error-label { font-size: 9px; color: #ff6a8a; letter-spacing: 0.1em; margin-bottom: 3px; }
-.error-body  { font-size: 10px; color: #cc6688; word-break: break-all; line-height: 1.4; }
+.error-label { font-size: 9px; color: #d6336c; letter-spacing: 0.1em; margin-bottom: 3px; }
+.error-body  { font-size: 10px; color: #b04a6e; word-break: break-all; line-height: 1.4; }
 
 .proof-success {
   border: 1px solid rgba(255,189,222,0.3);

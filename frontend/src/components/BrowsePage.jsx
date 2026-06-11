@@ -15,15 +15,15 @@ function reqChips(requirements) {
   return chips;
 }
 
-// tiny 10x21 preview from the 210 occupancy bits
+// tiny 10x20 preview from the 210 occupancy bits (row 0 = hidden spawn row)
 function BoardPreview({ board }) {
   return (
     <div className="puzzle-preview">
-      {Array.from({ length: 21 }, (_, r) =>
+      {Array.from({ length: 20 }, (_, r) =>
         Array.from({ length: 10 }, (_, c) => (
           <div
             key={`${r}-${c}`}
-            className={`preview-cell ${board[r * 10 + c] ? 'on' : ''}`}
+            className={`preview-cell ${board[(r + 1) * 10 + c] ? 'on' : ''}`}
           />
         ))
       )}

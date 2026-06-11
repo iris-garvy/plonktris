@@ -7,20 +7,19 @@
 }
 
 :root {
-  --pink:       #ffbdde;
-  --lavender:   #b5a5ff;
-  --bg-base:    #000000;
-  --bg-panel:   #0d0d0d;
-  --bg-raised:  #161616;
-  --border:     #333333;
-  --text:       #ffffff;
-  --text-dim:   #cccccc;
-  --text-muted: #666666;
-
-  /* alias for components that use the old names */
-  --accent:     var(--pink);
-  --accent-mid: #4a1535;
-  --accent-dim: #261020;
+  /* light theme: succinct-style warm cream + the original pink/lavender,
+     deepened where they need to read against light backgrounds */
+  --pink:          #ee3d99;   /* interactive pink */
+  --pink-soft:     #ffbdde;   /* original pastel, for tints and fills */
+  --lavender:      #7a63e0;   /* interactive lavender */
+  --lavender-soft: #b5a5ff;
+  --bg-base:       #fdf6f0;   /* warm cream */
+  --bg-panel:      #ffffff;
+  --bg-raised:     #f6ebe7;
+  --border:        #e6d8d2;
+  --text:          #181117;
+  --text-dim:      #4e4350;
+  --text-muted:    #a3928f;
 }
 
 html, body {
@@ -150,7 +149,7 @@ html, body {
   padding: 0 2px;
 }
 
-.user-logout:hover { color: #ff6a8a; }
+.user-logout:hover { color: #d6336c; }
 
 /* ── Browse layout ── */
 .browse-main {
@@ -286,7 +285,7 @@ html, body {
 ::-webkit-scrollbar        { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track  { background: var(--bg-panel); }
 ::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #555; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 ::selection { background: rgba(255, 189, 222, 0.2); color: var(--pink); }
 

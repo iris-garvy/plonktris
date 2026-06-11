@@ -223,7 +223,9 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
         </div>
 
         <div className="tetris-grid">
+          {/* row 0 is the hidden spawn row; only rows 1-20 are shown */}
           {board.map((row, rowIdx) =>
+            rowIdx === 0 ? null :
             row.map((cell, colIdx) => {
               const key = `${rowIdx},${colIdx}`;
               const isActive = activeSet.has(key);
@@ -241,7 +243,7 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
                     '--active-color': activeColor ?? 'transparent',
                     '--ghost-color':  ghostColor  ?? 'transparent',
                     gridColumn: colIdx + 1,
-                    gridRow:    rowIdx + 1,
+                    gridRow:    rowIdx, // shifted up: hidden row 0
                   }}
                   onClick={() => handleCellClick(rowIdx, colIdx)}
                 />

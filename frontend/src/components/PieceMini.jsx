@@ -41,7 +41,7 @@ export default function PieceMini({ pieceId, size = 14, dimmed = false }) {
               key={`${dy}-${dx}`}
               style={on ? {
                 background: color,
-                border: `1px solid color-mix(in srgb, ${color} 60%, white)`,
+                border: `1px solid color-mix(in srgb, ${color} 70%, black)`,
                 borderRadius: 1,
               } : { borderRadius: 1 }}
             />

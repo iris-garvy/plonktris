@@ -9,6 +9,7 @@
 /* ── Textbox ── */
 .queue-text-input {
   width: 80px;
+  height: 28px;  /* fixed so the column math below holds */
   box-sizing: border-box;
   background: var(--bg-base);
   border: 1px solid var(--border);
@@ -38,9 +39,10 @@
   gap: 0;
 }
 
+/* 28 (textbox) + 8 (gap) + 6 × 81 = 522 = board height (20×26 + borders) */
 .queue-box {
   width: 80px;
-  height: 80px;
+  height: 81px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -82,6 +84,7 @@
   height: 17px;
   font-size: 9px;
   font-weight: 700;
-  color: var(--pc);
-  border: 1px solid var(--pc);
+  color: var(--text);
+  background: color-mix(in srgb, var(--pc) 45%, white);
+  border: 1px solid color-mix(in srgb, var(--pc) 75%, black);
 }

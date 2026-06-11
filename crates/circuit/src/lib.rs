@@ -425,7 +425,7 @@ impl GameState {
         let old_ledger = self.ledger.ledger;
         let three_corners = adjusted_piece.three_corners(builder, board);
         let is_tspin = builder.and(three_corners, last_action_rotate);
-        let twenty_five = builder.constant(GoldilocksField::from_canonical_usize(25));
+        let twenty_six = builder.constant(GoldilocksField::from_canonical_usize(26));
         let seven = builder.constant(GoldilocksField::from_canonical_usize(7));
 
         let placed_board = board.place(builder, adjusted_piece);
@@ -454,7 +454,7 @@ impl GameState {
         attack = builder.mul_add(add_combo.target, combo_attack, attack);
 
         let new_combo = builder.mul_add(old_ledger[8], add_combo.target, add_combo.target);
-        let combo_index = builder.mul_add(new_combo, twenty_five, old_ledger[6]);
+        let combo_index = builder.mul_add(new_combo, twenty_six, old_ledger[6]);
         let is_max_combo = builder.add_lookup_from_index(combo_index, geq_table);
 
         let hold_empty = builder.is_equal(self.held_piece, seven);

@@ -326,7 +326,9 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
         </div>
 
         <div className="tetris-grid play-grid">
+          {/* row 0 is the hidden spawn row; only rows 1-20 are shown */}
           {playBoard.map((row, rowIdx) =>
+            rowIdx === 0 ? null :
             row.map((cell, colIdx) => {
               const key = `${rowIdx},${colIdx}`;
               const isActive = activeSet.has(key);
@@ -343,7 +345,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
                     '--active-color': activeColor ?? 'transparent',
                     '--ghost-color':  ghostColor  ?? 'transparent',
                     gridColumn: colIdx + 1,
-                    gridRow:    rowIdx + 1,
+                    gridRow:    rowIdx, // shifted up: hidden row 0
                   }}
                 />
               );

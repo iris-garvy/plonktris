@@ -36,7 +36,7 @@
 .overflow-warn {
   font-size: 8px;
   line-height: 1.5;
-  color: #ff6a8a;
+  color: #d6336c;
   letter-spacing: 0.03em;
 }
 
@@ -46,8 +46,8 @@
 .play-grid {
   display: grid;
   grid-template-columns: repeat(10, 26px);
-  grid-template-rows: repeat(21, 26px);
-  background: var(--bg-base);
+  grid-template-rows: repeat(20, 26px); /* rows 1-20; row 0 is hidden spawn */
+  background: var(--bg-panel);
   border: 1px solid var(--border);
 }
 
@@ -55,21 +55,21 @@
   width: 26px;
   height: 26px;
   box-sizing: border-box;
-  border-right: 1px solid rgba(255, 255, 255, 0.09);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  border-right: 1px solid rgba(0, 0, 0, 0.07);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
 }
 
 .play-grid .cell.filled {
   background: var(--cell-color);
-  border-color: color-mix(in srgb, var(--cell-color) 60%, white);
+  border-color: color-mix(in srgb, var(--cell-color) 70%, black);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--cell-color) 50%, white 50%),
-    inset 0 -1px 0 color-mix(in srgb, var(--cell-color) 50%, black 50%);
+    inset 0 -1px 0 color-mix(in srgb, var(--cell-color) 60%, black 40%);
 }
 
 .play-grid .cell.active-piece {
   background: var(--active-color);
-  border-color: color-mix(in srgb, var(--active-color) 60%, white);
+  border-color: color-mix(in srgb, var(--active-color) 70%, black);
   box-shadow: 0 0 5px color-mix(in srgb, var(--active-color) 40%, transparent);
 }
 

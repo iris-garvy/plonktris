@@ -122,6 +122,24 @@ async fn request_proof(
         if rustrict::CensorStr::is_inappropriate(n.as_str()) {
             return Err((StatusCode::BAD_REQUEST, "pick a different puzzle name".into()));
         }
+
+        // reject exact duplicates
+        let dup = sqlx::query_scalar!(
+            r#"SELECT EXISTS(
+                SELECT 1 FROM puzzles
+                WHERE board = $1 AND queue = $2 AND requirements = $3
+            ) AS "exists!""#,
+            body.board,
+            body.queue,
+            body.requirements,
+        )
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+
+        if dup {
+            return Err((StatusCode::CONFLICT, "an identical puzzle already exists".into()));
+        }
         Some(n)
     };
 
@@ -176,8 +194,6 @@ async fn process_next_job(worker_state: &Arc<AppState>) -> Result<bool, String> 
 
         match rx.await {
             Ok(Ok(proof_bytes)) => {
-                // solve mode records a solve on the target puzzle;
-                // publish mode creates a new puzzle
                 let outcome = if let Some(target) = job.target_puzzle_id {
                     record_solve(worker_state, proof_bytes, &job.board, &job.queue,
                         &job.requirements, target, job.user_id).await
@@ -329,7 +345,11 @@ async fn submit_proof(
         name,
         creator_id,
     )
-    .fetch_one(&state.db).await.map_err(|e| format!("db error: {e}"))?;
+    .fetch_one(&state.db).await.map_err(|e| match &e {
+        sqlx::Error::Database(db) if db.is_unique_violation() =>
+            "an identical puzzle already exists".to_string(),
+        _ => format!("db error: {e}"),
+    })?;
 
     Ok(id)
 }

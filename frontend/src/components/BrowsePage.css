@@ -14,7 +14,7 @@
   letter-spacing: 0.05em;
 }
 
-.browse-error { color: #ff6a8a; margin-bottom: 6px; }
+.browse-error { color: #d6336c; margin-bottom: 6px; }
 .browse-hint  { font-size: 10px; }
 
 /* ── Card ── */
@@ -36,7 +36,7 @@
 .puzzle-preview {
   display: grid;
   grid-template-columns: repeat(10, 6px);
-  grid-template-rows: repeat(21, 6px);
+  grid-template-rows: repeat(20, 6px);
   gap: 1px;
   background: var(--bg-base);
   border: 1px solid var(--border);
@@ -45,8 +45,8 @@
   align-self: flex-start;
 }
 
-.preview-cell { background: #111; }
-.preview-cell.on { background: #b1b1b1; }
+.preview-cell { background: var(--bg-raised); }
+.preview-cell.on { background: #8d7f8a; }
 
 /* info column */
 .puzzle-info {
@@ -86,23 +86,28 @@
   height: 15px;
   font-size: 8px;
   font-weight: 700;
-  color: var(--pc);
-  border: 1px solid var(--pc);
+  color: var(--text);
+  background: color-mix(in srgb, var(--pc) 45%, white);
+  border: 1px solid color-mix(in srgb, var(--pc) 75%, black);
 }
 
 .puzzle-reqs {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 3px;
 }
 
 .puzzle-req-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 15px;             /* matches .puzzle-queue-chip */
+  box-sizing: border-box;
   font-size: 8px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   color: var(--lavender);
-  border: 1px solid var(--lavender);
-  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--lavender) 60%, transparent);
+  padding: 0 4px;
 }
 
 .puzzle-footer {
