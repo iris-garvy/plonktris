@@ -1,24 +1,24 @@
 import { useRef, useEffect } from 'react';
+import { DEFAULT_HANDLING } from './keybindings';
 
 // Guideline-style handling: DAS (delayed auto shift) then ARR (auto repeat rate).
-const DAS = 150;  // ms before auto-repeat kicks in
-const ARR = 30;   // ms between repeats while held
-const SDR = 30;   // soft drop repeat rate
-
-export function useDasArr(actions) {
-  // keep latest move closures so timers never act on stale state
+// Soft drop repeats at ARR with no initial delay.
+export function useDasArr(actions, handling) {
+  // keep latest move closures / settings so timers never act on stale state
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
+  const handlingRef = useRef(handling);
+  handlingRef.current = handling;
 
   const timers = useRef({});
 
   function start(dir) {
     if (timers.current[dir]) return; // already held
+    const { das, arr } = { ...DEFAULT_HANDLING, ...handlingRef.current };
     actionsRef.current[dir]();
-    const delay = dir === 'down' ? SDR : DAS;
-    const rate  = dir === 'down' ? SDR : ARR;
+    const delay = dir === 'down' ? arr : das;
     const timeout = setTimeout(() => {
-      timers.current[dir].interval = setInterval(() => actionsRef.current[dir](), rate);
+      timers.current[dir].interval = setInterval(() => actionsRef.current[dir](), arr);
     }, delay);
     timers.current[dir] = { timeout, interval: null };
   }

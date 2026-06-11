@@ -88,13 +88,17 @@ export function clearLines(board) {
   return [...emptyRows, ...surviving];
 }
 
+// O pieces spawn one column right (centered), matching the circuit's spawn rule.
+export function spawnCol(pieceId) {
+  return pieceId === 2 ? 4 : 3;
+}
+
+// Circuit expects 0/1 occupancy bits, row 0 = top (same orientation as the UI).
 export function boardToUint8(board) {
   const out = new Uint8Array(BOARD_ROWS * BOARD_COLS);
   for (let r = 0; r < BOARD_ROWS; r++) {
-    const proverRow = BOARD_ROWS - 1 - r;
     for (let c = 0; c < BOARD_COLS; c++) {
-      const cell = board[r][c];
-      out[proverRow * BOARD_COLS + c] = cell > 0 ? cell - 1 : 0;
+      out[r * BOARD_COLS + c] = board[r][c] > 0 ? 1 : 0;
     }
   }
   return out;
@@ -149,9 +153,12 @@ export function movesToUint8(secretMoves) {
 export function rotate(board, pieceId, rotation, startRow, startCol, is_cw) {
   let finalRotation = (rotation + is_cw + 3 * !is_cw) % 4;
   if (pieceId != 2) {
+    // kick row layout matches the circuit: initial_rotation * 2 + is_cw
+    const kickRow = rotation * 2 + is_cw;
+    const kicks = SRS_KICKS[Number(pieceId === 1)][kickRow];
     for (let kick = 0; kick < 5; kick++) {
-      let tryRow = startRow - SRS_KICKS[Number((pieceId === 1))][rotation + is_cw][kick][1];
-      let tryCol = startCol + SRS_KICKS[Number((pieceId === 1))][rotation + is_cw][kick][0];
+      const tryRow = startRow - kicks[kick][1];
+      const tryCol = startCol + kicks[kick][0];
 
       if (isValidPlacement(board, pieceId, finalRotation, tryRow, tryCol)) {
         return [finalRotation, tryRow, tryCol];

@@ -123,6 +123,23 @@ html, body {
   color: var(--text-muted);
 }
 
+.keys-open-btn {
+  margin-left: 8px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.keys-open-btn:hover {
+  border-color: var(--lavender);
+  color: var(--lavender);
+}
+
 /* ── Main layout ── */
 .app-main {
   display: flex;
@@ -186,6 +203,15 @@ html, body {
 .right-proof {
   margin-top: 8px;  /* same gap as inside the queue column */
   width: 80px;
+}
+
+.solve-hint {
+  margin-top: 6px;
+  width: 80px;
+  font-size: 8px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
 }
 
 /* ── Scrollbar ── */

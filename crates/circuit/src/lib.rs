@@ -79,12 +79,10 @@ pub fn deserialize_board(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> [T
 
 pub fn bits_to_board(builder: &mut CircuitBuilder<GoldilocksField, 2>, bits: [Target;210]) -> Result<BoardTargets, String> {
     let mut cells = [builder.zero(); 21];
-    let mut const_target;
     let mut column_mask= [builder.zero(); 10];
 
     for c in 0..10 {
-        const_target = builder.constant(GoldilocksField::from_canonical_usize(c));
-        column_mask[c] = col_to_mask(builder, const_target);
+        column_mask[c] = builder.constant(GoldilocksField(1 << c));
     }
 
     for row in 0..21 {
@@ -400,7 +398,7 @@ impl GameState {
 
         last_action_rotate = builder.and(didnt_shift, last_action_rotate);
         last_action_rotate = builder.and(didnt_sd, last_action_rotate);
-        last_action_rotate = builder.or(rotate_ok, last_action_rotate);
+        last_action_rotate = builder.or(rotated, last_action_rotate);
 
         let mut adjusted_piece = current_piece;
         adjusted_piece = select_piece_state(builder, is_shift, shifted_piece, adjusted_piece);
@@ -460,7 +458,8 @@ impl GameState {
         let is_max_combo = builder.add_lookup_from_index(combo_index, geq_table);
 
         let hold_empty = builder.is_equal(self.held_piece, seven);
-        let always_empty = builder.and(hold_empty, BoolTarget::new_unsafe(old_ledger[7]));
+        let hold_full = builder.not(hold_empty);
+        let held_used = builder.or(hold_full, BoolTarget::new_unsafe(old_ledger[7]));
 
         let new_ledger = LedgerTargets{ ledger:
             [
@@ -471,7 +470,7 @@ impl GameState {
                 builder.add(old_ledger[4], is_pc.target),
                 builder.add(old_ledger[5], attack),
                 builder.select(BoolTarget::new_unsafe(is_max_combo), new_combo, old_ledger[6]),
-                always_empty.target,
+                held_used.target,
                 new_combo,
                 keep_b2b.target
             ]

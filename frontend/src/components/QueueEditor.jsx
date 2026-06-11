@@ -20,14 +20,18 @@ export function textToQueue(text) {
 // Toolbar height = 36px, gap = 8px  → total board height = 590px
 // 6 boxes × BOX_H + 5 × GAP + label + chips must ≈ 590px
 
-export default function QueueEditor({ queue, onQueueChange, currentIdx = 0 }) {
+export default function QueueEditor({ queue, onQueueChange, currentPiece = null, nextIdx = 0 }) {
   const editable = !!onQueueChange;
 
-  // The 6 displayed slots: index currentIdx through currentIdx+5
-  const displaySlots = Array.from({ length: 6 }, (_, i) => {
-    const qi = currentIdx + i;
-    return { pieceId: queue[qi] ?? null, isCurrent: i === 0 };
-  });
+  // Slot 0 is the piece actually in play (may differ from the queue after a
+  // hold swap); slots 1-5 are the next unconsumed queue pieces.
+  const displaySlots = [
+    { pieceId: currentPiece, isCurrent: true },
+    ...Array.from({ length: 5 }, (_, i) => ({
+      pieceId: queue[nextIdx + i] ?? null,
+      isCurrent: false,
+    })),
+  ];
 
   function handleChange(e) {
     onQueueChange?.(textToQueue(e.target.value));
@@ -59,9 +63,9 @@ export default function QueueEditor({ queue, onQueueChange, currentIdx = 0 }) {
         ))}
 
         {/* overflow: pieces waiting to enter the visible queue */}
-        {queue.length > currentIdx + 6 && (
+        {queue.length > nextIdx + 5 && (
           <div className="queue-overflow">
-            {queue.slice(currentIdx + 6).map((pid, i) => (
+            {queue.slice(nextIdx + 5).map((pid, i) => (
               <span
                 key={i}
                 className="queue-chip"

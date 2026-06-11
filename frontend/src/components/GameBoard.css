@@ -29,6 +29,17 @@
   text-overflow: ellipsis;
 }
 
+.req-summary.met {
+  color: var(--lavender);
+}
+
+.overflow-warn {
+  font-size: 8px;
+  line-height: 1.5;
+  color: #ff6a8a;
+  letter-spacing: 0.03em;
+}
+
 /* Reuses .board-layout, .board-side-panel, .hold-box from TetrisBoard.css */
 
 /* Play grid — identical sizing to edit grid */

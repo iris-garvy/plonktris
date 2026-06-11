@@ -7,18 +7,26 @@ import RequirementsModal from './components/RequirementsModal';
 import GameBoard from './components/GameBoard';
 import QueueEditor from './components/QueueEditor';
 import { boardToUint8, movesToUint8, clearLines, BOARD_COLS, BOARD_ROWS } from './tetrisUtils';
+import { emptyLedger, requirementsMet } from './tetrisLedger';
+import KeybindingsModal from './components/KeybindingsModal';
+import { loadBindings, saveBindings, loadHandling, saveHandling } from './keybindings';
 
 const emptyBoard = () =>
   Array.from({ length: BOARD_ROWS }, () => new Array(BOARD_COLS).fill(0));
 
 const REQ_NAMES = ['TSS', 'TSD', 'TST', 'TETRIS', 'PC', 'ATTACK', 'COMBO'];
 
-function requirementsSummary(requirements) {
+// live progress against the requirements, e.g. "TSD 1/2 · PC 0/1 · NO HOLD ✓"
+function requirementsProgress(requirements, ledger) {
+  const counts = [
+    ledger.tss, ledger.tsd, ledger.tst, ledger.tetris,
+    ledger.pc, ledger.attack, ledger.maxCombo,
+  ];
   const parts = requirements
     .slice(0, 7)
-    .map((v, i) => (v > 0 ? `${REQ_NAMES[i]} ${v}` : null))
+    .map((v, i) => (v > 0 ? `${REQ_NAMES[i]} ${counts[i]}/${v}` : null))
     .filter(Boolean);
-  if (requirements[7]) parts.push('NO HOLD');
+  if (requirements[7]) parts.push(ledger.heldUsed ? 'NO HOLD ✗' : 'NO HOLD ✓');
   return parts.length ? parts.join(' · ') : 'no requirements';
 }
 
@@ -29,11 +37,13 @@ function App() {
   const [queue, setQueue] = useState([1, 1, 1, 1, 2]);
   const [requirements, setRequirements] = useState([0, 0, 0, 0, 0, 0, 0, 0]);
 
-  // edit-mode queue progress (reported by TetrisBoard, drives queue display)
-  const [editQueueIdx, setEditQueueIdx] = useState(0);
+  // live piece-flow view reported by whichever board is active (incl. holds)
+  const [queueView, setQueueView] = useState({ current: null, nextIdx: 0 });
+
+  // frontend mirror of the circuit's ledger, reported by GameBoard each lock
+  const [ledger, setLedger] = useState(emptyLedger);
 
   const [stage, setStage]             = useState('edit');
-  const [placedCount, setPlacedCount] = useState(0);
   const [secretMoves, setSecretMoves] = useState(null);
   const [proof, setProof]             = useState(null);
   const [proofError, setProofError]   = useState(null);
@@ -41,6 +51,21 @@ function App() {
   // requirements are entered once, in a popup, at first prove
   const [showReqModal, setShowReqModal]   = useState(false);
   const [reqsConfirmed, setReqsConfirmed] = useState(false);
+
+  // keybindings + handling (persisted to localStorage)
+  const [keys, setKeys] = useState(loadBindings);
+  const [handling, setHandling] = useState(loadHandling);
+  const [showKeysModal, setShowKeysModal] = useState(false);
+
+  function handleKeysChange(next) {
+    setKeys(next);
+    saveBindings(next);
+  }
+
+  function handleHandlingChange(next) {
+    setHandling(next);
+    saveHandling(next);
+  }
 
   // ── edit board cell paint ──
   const handleCellToggle = useCallback((row, col, value) => {
@@ -62,7 +87,6 @@ function App() {
 
   function handleQueueChange(newQueue) {
     setQueue(newQueue);
-    setEditQueueIdx(0);
   }
 
   // ── stage transitions ──
@@ -73,7 +97,7 @@ function App() {
   }
 
   function enterSolveMode() {
-    setPlacedCount(0);
+    setLedger(emptyLedger());
     setSecretMoves(null);
     setProof(null);
     setProofError(null);
@@ -81,7 +105,6 @@ function App() {
   }
 
   function handleBackToEdit() {
-    setPlacedCount(0);
     setSecretMoves(null);
     setProof(null);
     setProofError(null);
@@ -92,7 +115,6 @@ function App() {
 
   function handleMovesComplete(moves) {
     setSecretMoves(moves);
-    setPlacedCount(moves.length);
   }
 
   // ── proving ──
@@ -123,7 +145,8 @@ function App() {
     enterSolveMode();
   }
 
-  const reqSummary = reqsConfirmed ? requirementsSummary(requirements) : null;
+  const reqSummary = reqsConfirmed ? requirementsProgress(requirements, ledger) : null;
+  const reqsDone   = requirementsMet(ledger, requirements);
 
   return (
     <div className="app">
@@ -150,6 +173,9 @@ function App() {
           >
             02 SOLVE
           </button>
+          <button className="keys-open-btn" onClick={() => setShowKeysModal(true)} title="Keybindings">
+            ⌨
+          </button>
         </div>
       </header>
 
@@ -164,16 +190,22 @@ function App() {
               board={board}
               onCellToggle={handleCellToggle}
               onPiecePlaced={handleEditPiecePlaced}
-              onProgress={setEditQueueIdx}
+              onQueueView={setQueueView}
               queue={queue}
+              keys={keys}
+              handling={handling}
             />
           ) : (
             <GameBoard
               initialBoard={board}
               queue={queue}
               onComplete={handleMovesComplete}
-              onProgress={setPlacedCount}
+              onQueueView={setQueueView}
+              onLedger={setLedger}
               reqText={reqSummary}
+              reqsDone={reqsDone}
+              keys={keys}
+              handling={handling}
             />
           )}
         </section>
@@ -183,7 +215,8 @@ function App() {
           <QueueEditor
             queue={queue}
             onQueueChange={stage === 'edit' ? handleQueueChange : undefined}
-            currentIdx={stage === 'edit' ? editQueueIdx : placedCount}
+            currentPiece={queueView.current}
+            nextIdx={queueView.nextIdx}
           />
           <div className="right-proof">
             {stage === 'edit' ? (
@@ -195,18 +228,35 @@ function App() {
                 ▶ solve
               </button>
             ) : (
-              <ProofPanel
-                isReady={isReady}
-                isProving={isProving}
-                error={error || proofError}
-                proof={proof}
-                onProve={handleProveClick}
-                disabled={!secretMoves}
-              />
+              <>
+                <ProofPanel
+                  isReady={isReady}
+                  isProving={isProving}
+                  error={error || proofError}
+                  proof={proof}
+                  onProve={handleProveClick}
+                  disabled={!secretMoves || !reqsDone}
+                />
+                {secretMoves && !reqsDone && (
+                  <div className="solve-hint">
+                    conditions not met — edit and try again
+                  </div>
+                )}
+              </>
             )}
           </div>
         </aside>
       </main>
+
+      {showKeysModal && (
+        <KeybindingsModal
+          bindings={keys}
+          onChange={handleKeysChange}
+          handling={handling}
+          onHandlingChange={handleHandlingChange}
+          onClose={() => setShowKeysModal(false)}
+        />
+      )}
 
       {showReqModal && (
         <RequirementsModal
