@@ -74,9 +74,8 @@
 }
 
 .play-grid .cell.ghost-piece {
-  background: transparent;
-  border: 1px dashed var(--ghost-color);
-  opacity: 0.3;
+  background: color-mix(in srgb, var(--ghost-color) 30%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--ghost-color) 70%, black);
 }
 
 /* Piece mini */

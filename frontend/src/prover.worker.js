@@ -40,8 +40,8 @@ onmessage = async function(e) {
             if (!res.ok) throw new Error(`submit failed: ${res.statusText}`);
             const { proof_id } = await res.json();
 
-            const puzzleId = await pollJob(proof_id);
-            postMessage({ type: "proof", id, proof: puzzleId });
+            const resultPuzzleId = await pollJob(proof_id);
+            postMessage({ type: "proof", id, proof: resultPuzzleId });
         }
     } catch (err) {
         // JsValue errors from wasm don't have .message, they ARE the message

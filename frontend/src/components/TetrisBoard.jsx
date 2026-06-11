@@ -8,8 +8,17 @@ import { keySig, normKey, baseKey } from '../keybindings';
 import PieceMini from './PieceMini';
 import './TetrisBoard.css';
 
-export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoardSet, onQueueView, queue, keys, handling }) {
+export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoardSet, onQueueView, queue, keys, handling, sidePanel }) {
   const [selectedPaint, setSelectedPaint] = useState(1);
+
+  // click-drag painting: the value set on mousedown is painted onto every
+  // cell the cursor passes over until mouseup
+  const paintingRef = useRef(null);
+  useEffect(() => {
+    const stop = () => { paintingRef.current = null; };
+    window.addEventListener('mouseup', stop);
+    return () => window.removeEventListener('mouseup', stop);
+  }, []);
 
   // piece flow (same model as solve mode, minus move recording)
   const [queuePos, setQueuePos]         = useState(1);
@@ -73,10 +82,20 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
   const activeSet   = new Set(activeCells.map(c => `${c.row},${c.col}`));
   const ghostSet    = new Set(ghostCells.map(c => `${c.row},${c.col}`));
 
-  function handleCellClick(row, col) {
+  function handleCellDown(row, col) {
     const cur = board[row][col];
-    onCellToggle(row, col, cur === selectedPaint ? EMPTY : selectedPaint);
+    const value = cur === selectedPaint ? EMPTY : selectedPaint;
+    paintingRef.current = value;
+    onCellToggle(row, col, value);
   }
+
+  function handleCellEnter(row, col) {
+    if (paintingRef.current == null) return;
+    if (board[row][col] !== paintingRef.current) {
+      onCellToggle(row, col, paintingRef.current);
+    }
+  }
+
 
   function shiftPiece(dir) {
     if (!currentPiece) return;
@@ -131,7 +150,6 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
   }
 
   function clearBoard() {
-    // undoable: snapshot the current state first
     historyRef.current.push({ board: board.map(r => [...r]), ...turnStartRef.current });
     das.stopAll();
     onBoardSet(Array.from({ length: BOARD_ROWS }, () => new Array(BOARD_COLS).fill(EMPTY)));
@@ -199,6 +217,7 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
           <div className="hold-box">
             <PieceMini pieceId={held} size={12} />
           </div>
+          {sidePanel}
         </div>
 
         <div className="board-column">
@@ -245,7 +264,8 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
                     gridColumn: colIdx + 1,
                     gridRow:    rowIdx, // shifted up: hidden row 0
                   }}
-                  onClick={() => handleCellClick(rowIdx, colIdx)}
+                  onMouseDown={e => { e.preventDefault(); handleCellDown(rowIdx, colIdx); }}
+                  onMouseOver={() => handleCellEnter(rowIdx, colIdx)}
                 />
               );
             })

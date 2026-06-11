@@ -2,13 +2,15 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 80px;   /* one column: textbox, squares, chips all line up */
-  padding-top: 48px; /* toolbar height + gap, flush with grid top */
+  width: 87px;   /* one column: textbox and squares line up */
+  /* textbox sits in the toolbar zone: 12 + 28 (textbox) + 8 (gap) = 48
+     = toolbar height + gap, so the boxes start flush with the grid top */
+  padding-top: 12px;
 }
 
 /* ── Textbox ── */
 .queue-text-input {
-  width: 80px;
+  width: 87px;
   height: 28px;  /* fixed so the column math below holds */
   box-sizing: border-box;
   background: var(--bg-base);
@@ -33,16 +35,17 @@
 
 /* ── Queue column: squares + fused overflow ── */
 .queue-column {
+  position: relative;
   display: flex;
   flex-direction: column;
-  width: 80px;
+  width: 87px;
   gap: 0;
 }
 
-/* 28 (textbox) + 8 (gap) + 6 × 81 = 522 = board height (20×26 + borders) */
+/* 6 × 87 = 522 = board height (20×26 + borders), top and bottom flush */
 .queue-box {
-  width: 80px;
-  height: 81px;
+  width: 87px;
+  height: 87px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -55,24 +58,18 @@
 .queue-box:first-child { border-top: 1px solid var(--border); }
 .queue-box:last-child  { border-bottom: 1px solid var(--border); }
 
-.queue-box.current {
-  border-color: var(--pink);
-  border-bottom: 1px solid var(--pink);
-  background: color-mix(in srgb, var(--pink) 6%, var(--bg-raised));
-}
-.queue-box.current + .queue-box { border-top: none; }
-
 .queue-box.empty { opacity: 0.3; }
 
-/* ── Overflow chips: a queue for the queue ── */
+/* ── Overflow chips: a rail snaking up the queue's right side, feeding
+   into the bottom of the visible queue. First-in-line sits at the bottom
+   corner (the entry point); later pieces stack upward. ── */
 .queue-overflow {
+  position: absolute;
+  left: 100%;
+  bottom: 0;
+  margin-left: 3px;
   display: flex;
-  flex-wrap: wrap;
-  width: 80px;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
-  box-sizing: border-box;
-  padding: 2px;
+  flex-direction: column-reverse;
   gap: 2px;
 }
 
@@ -80,9 +77,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 17px;
-  height: 17px;
-  font-size: 9px;
+  width: 15px;
+  height: 15px;
+  font-size: 8px;
   font-weight: 700;
   color: var(--text);
   background: color-mix(in srgb, var(--pc) 45%, white);

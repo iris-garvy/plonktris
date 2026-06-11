@@ -41,7 +41,7 @@ export const BINDING_LABELS = {
   hold:       'hold',
   place:      'place',
   undo:       'undo',
-  clearBoard: 'clear board (edit)',
+  clearBoard: 'clear',
 };
 
 // single chars compare lowercase so shift state doesn't matter

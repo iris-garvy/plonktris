@@ -13,14 +13,11 @@ export function emptyLedger() {
   };
 }
 
-// circuit block_collision: out of bounds counts as occupied
 function blocked(board, row, col) {
   if (row < 0 || row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) return true;
   return board[row][col] !== EMPTY;
 }
 
-// circuit three_corners: >=3 occupied corners of the T's 3x3 box,
-// checked against the board BEFORE the piece is merged
 export function tspinCorners(board, row, col) {
   let n = 0;
   for (const [dx, dy] of [[0, 0], [2, 0], [0, 2], [2, 2]]) {
@@ -29,16 +26,14 @@ export function tspinCorners(board, row, col) {
   return n >= 3;
 }
 
-// Mirrors circuit lock_piece ledger update exactly (except max_combo, which
-// implements the intended max() — see the geq stride note in the circuit).
 export function lockLedger(ledger, {
-  boardBefore,      // board before the piece merged
-  boardCleared,     // board after merge + line clears
+  boardBefore,      
+  boardCleared,     
   linesCleared,
-  pieceId,          // frontend piece id (T = 3)
-  landRow, col,     // lock position
-  lastActionRotate, // rotation flag AND piece couldn't drop at lock
-  heldOccupied,     // hold slot occupied at lock time
+  pieceId,         
+  landRow, col,     
+  lastActionRotate, 
+  heldOccupied, 
 }) {
   const next = { ...ledger };
   const lines = Math.min(linesCleared, 4);
@@ -70,8 +65,6 @@ export function lockLedger(ledger, {
   return next;
 }
 
-// Mirrors verify_requirements: each counter must reach its requirement,
-// and a no-hold requirement forbids ever holding.
 export function requirementsMet(ledger, requirements) {
   const counts = [
     ledger.tss, ledger.tsd, ledger.tst, ledger.tetris,

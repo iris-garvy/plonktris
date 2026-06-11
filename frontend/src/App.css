@@ -129,7 +129,7 @@ html, body {
   align-items: center;
   gap: 6px;
   border: 1px solid var(--border);
-  padding: 3px 8px;
+  padding: 0px 8px;
 }
 
 .user-name {
@@ -244,7 +244,7 @@ html, body {
 
 /* ── Start solving button ── */
 .start-solving-btn {
-  width: 80px;   /* lines up with the queue column */
+  width: 100%;   /* fills the 87px side panel */
   background: transparent;
   border: 1px solid var(--pink);
   color: var(--pink);
@@ -274,7 +274,6 @@ html, body {
 
 .solve-hint {
   margin-top: 6px;
-  width: 80px;
   font-size: 8px;
   line-height: 1.5;
   color: var(--text-muted);

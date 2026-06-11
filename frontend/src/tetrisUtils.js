@@ -88,12 +88,11 @@ export function clearLines(board) {
   return [...emptyRows, ...surviving];
 }
 
-// O pieces spawn one column right (centered), matching the circuit's spawn rule.
+// o piece column 4 spawn all else 3
 export function spawnCol(pieceId) {
   return pieceId === 2 ? 4 : 3;
 }
 
-// Circuit expects 0/1 occupancy bits, row 0 = top (same orientation as the UI).
 export function boardToUint8(board) {
   const out = new Uint8Array(BOARD_ROWS * BOARD_COLS);
   for (let r = 0; r < BOARD_ROWS; r++) {

@@ -1,8 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { DEFAULT_HANDLING } from './keybindings';
 
-// Guideline-style handling: DAS (delayed auto shift) then ARR (auto repeat rate).
-// Soft drop repeats at ARR with no initial delay.
 export function useDasArr(actions, handling) {
   // keep latest move closures / settings so timers never act on stale state
   const actionsRef = useRef(actions);

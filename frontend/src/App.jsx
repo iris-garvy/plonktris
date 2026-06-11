@@ -19,7 +19,6 @@ const emptyBoard = () =>
 
 const REQ_NAMES = ['TSS', 'TSD', 'TST', 'TETRIS', 'PC', 'ATTACK', 'COMBO'];
 
-// live progress against the requirements, e.g. "TSD 1/2 · PC 0/1 · NO HOLD ✓"
 function requirementsProgress(requirements, ledger) {
   const counts = [
     ledger.tss, ledger.tsd, ledger.tst, ledger.tetris,
@@ -36,10 +35,9 @@ function requirementsProgress(requirements, ledger) {
 function App() {
   const { prove, isReady, isProving, error } = usePlonkyProver();
 
-  // ── top-level view: browse other puzzles / create your own / play one ──
-  const [view, setView] = useState('browse'); // 'browse' | 'create' | 'play'
+  // index
+  const [view, setView] = useState('browse');
 
-  // ── auth ──
   const [user, setUser] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
@@ -56,17 +54,16 @@ function App() {
     setUser(null);
   }
 
-  // ── create-mode state (the puzzle being authored) ──
+  //create mode
   const [board, setBoard] = useState(emptyBoard);
-  const [queue, setQueue] = useState([1, 1, 1, 1, 2]);
+  const [queue, setQueue] = useState([1, 2, 3, 4, 5, 6, 7]);
   const [requirements, setRequirements] = useState([0, 0, 0, 0, 0, 0, 0, 0]);
   const [puzzleName, setPuzzleName] = useState('');
   const [stage, setStage] = useState('edit'); // 'edit' | 'solve' within create
 
-  // ── play-mode state (someone else's puzzle, converted to frontend formats) ──
   const [playPuzzle, setPlayPuzzle] = useState(null);
 
-  // ── shared solve/play state ──
+  //solve/play
   const [queueView, setQueueView] = useState({ current: null, nextIdx: 0 });
   const [ledger, setLedger] = useState(emptyLedger);
   const [secretMoves, setSecretMoves] = useState(null);
@@ -76,7 +73,6 @@ function App() {
   const [showReqModal, setShowReqModal] = useState(false);
   const [reqsConfirmed, setReqsConfirmed] = useState(false);
 
-  // ── keybindings + handling ──
   const [keys, setKeys] = useState(loadBindings);
   const [handling, setHandling] = useState(loadHandling);
   const [showKeysModal, setShowKeysModal] = useState(false);
@@ -91,7 +87,6 @@ function App() {
     setProofError(null);
   }
 
-  // ── view transitions ──
   function gotoBrowse() {
     resetRunState();
     setPlayPuzzle(null);
@@ -121,7 +116,6 @@ function App() {
     setView('play');
   }
 
-  // ── create: edit board handlers ──
   const handleCellToggle = useCallback((row, col, value) => {
     setBoard(prev => {
       const next = prev.map(r => [...r]);
@@ -138,7 +132,6 @@ function App() {
     });
   }
 
-  // ── create: stage transitions ──
   function handleStartSolving() {
     if (queue.length === 0) return;
     setShowReqModal(true);
@@ -158,7 +151,6 @@ function App() {
     setStage('edit');
   }
 
-  // ── proving ──
   async function runProve() {
     if (!secretMoves) return;
     setProof(null);
@@ -166,7 +158,6 @@ function App() {
     try {
       let boardBytes, queueBytes, reqBytes, extra;
       if (view === 'play') {
-        // prove against the puzzle's exact public inputs
         boardBytes = new Uint8Array(playPuzzle.board);
         queueBytes = new Uint8Array(playPuzzle.queue);
         reqBytes   = new Uint8Array(playPuzzle.requirements);
@@ -185,14 +176,11 @@ function App() {
     }
   }
 
-  // login is optional: anonymous users can publish and prove; solves are
-  // only recorded against an account when logged in
   function handleProveClick() {
     if (!secretMoves) return;
     runProve();
   }
 
-  // ── derived ──
   const activeReqs = view === 'play' ? playPuzzle?.requirements : requirements;
   const reqsDone   = activeReqs ? requirementsMet(ledger, activeReqs) : false;
   const showProgress = view === 'play' || reqsConfirmed;
@@ -271,7 +259,7 @@ function App() {
           {/* LEFT (spacer keeps the board centered) */}
           <aside className="sidebar sidebar-left" />
 
-          {/* CENTER: board */}
+          {/* CENTER: board (action block renders under the hold box) */}
           <section className="board-section">
             {view === 'create' && stage === 'edit' ? (
               <TetrisBoard
@@ -283,6 +271,15 @@ function App() {
                 queue={queue}
                 keys={keys}
                 handling={handling}
+                sidePanel={
+                  <button
+                    className="start-solving-btn"
+                    onClick={handleStartSolving}
+                    disabled={queue.length === 0}
+                  >
+                    ▶ solve
+                  </button>
+                }
               />
             ) : (
               <GameBoard
@@ -296,52 +293,41 @@ function App() {
                 reqsDone={reqsDone}
                 keys={keys}
                 handling={handling}
+                sidePanel={
+                  <>
+                    <ProofPanel
+                      isReady={isReady}
+                      isProving={isProving}
+                      error={error || proofError}
+                      proof={proof}
+                      onProve={handleProveClick}
+                      disabled={!secretMoves || !reqsDone}
+                    />
+                    {secretMoves && !reqsDone && (
+                      <div className="solve-hint">
+                        conditions not met — undo and try again
+                      </div>
+                    )}
+                    {secretMoves && reqsDone && !user && (
+                      <div className="solve-hint">
+                        {view === 'play'
+                          ? 'anonymous — log in to record your solve'
+                          : 'publishing anonymously — log in to claim your puzzle'}
+                      </div>
+                    )}
+                  </>
+                }
               />
             )}
           </section>
 
-          {/* RIGHT: queue (always) + action block */}
+          {/* RIGHT: the queue */}
           <aside className="sidebar sidebar-right">
             <QueueEditor
               queue={view === 'play' ? playPuzzle.queueIds : queue}
               onQueueChange={view === 'create' && stage === 'edit' ? setQueue : undefined}
-              currentPiece={queueView.current}
               nextIdx={queueView.nextIdx}
             />
-            <div className="right-proof">
-              {view === 'create' && stage === 'edit' ? (
-                <button
-                  className="start-solving-btn"
-                  onClick={handleStartSolving}
-                  disabled={queue.length === 0}
-                >
-                  ▶ solve
-                </button>
-              ) : solving ? (
-                <>
-                  <ProofPanel
-                    isReady={isReady}
-                    isProving={isProving}
-                    error={error || proofError}
-                    proof={proof}
-                    onProve={handleProveClick}
-                    disabled={!secretMoves || !reqsDone}
-                  />
-                  {secretMoves && !reqsDone && (
-                    <div className="solve-hint">
-                      conditions not met — undo and try again
-                    </div>
-                  )}
-                  {secretMoves && reqsDone && !user && (
-                    <div className="solve-hint">
-                      {view === 'play'
-                        ? 'anonymous — log in to record your solve'
-                        : 'publishing anonymously — log in to claim your puzzle'}
-                    </div>
-                  )}
-                </>
-              ) : null}
-            </div>
           </aside>
         </main>
       )}

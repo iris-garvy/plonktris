@@ -20,18 +20,13 @@ export function textToQueue(text) {
 // Toolbar height = 36px, gap = 8px  → total board height = 590px
 // 6 boxes × BOX_H + 5 × GAP + label + chips must ≈ 590px
 
-export default function QueueEditor({ queue, onQueueChange, currentPiece = null, nextIdx = 0 }) {
+export default function QueueEditor({ queue, onQueueChange, nextIdx = 0 }) {
   const editable = !!onQueueChange;
 
-  // Slot 0 is the piece actually in play (may differ from the queue after a
-  // hold swap); slots 1-5 are the next unconsumed queue pieces.
-  const displaySlots = [
-    { pieceId: currentPiece, isCurrent: true },
-    ...Array.from({ length: 5 }, (_, i) => ({
-      pieceId: queue[nextIdx + i] ?? null,
-      isCurrent: false,
-    })),
-  ];
+  // the next 6 unconsumed queue pieces (the piece in play is on the board)
+  const displaySlots = Array.from({ length: 6 }, (_, i) => ({
+    pieceId: queue[nextIdx + i] ?? null,
+  }));
 
   function handleChange(e) {
     onQueueChange?.(textToQueue(e.target.value));
@@ -53,19 +48,19 @@ export default function QueueEditor({ queue, onQueueChange, currentPiece = null,
 
       {/* Queue column: 6 squares, overflow chips fused below */}
       <div className="queue-column">
-        {displaySlots.map(({ pieceId, isCurrent }, i) => (
+        {displaySlots.map(({ pieceId }, i) => (
           <div
             key={i}
-            className={`queue-box ${isCurrent ? 'current' : ''} ${pieceId == null ? 'empty' : ''}`}
+            className={`queue-box ${pieceId == null ? 'empty' : ''}`}
           >
             {pieceId != null && <PieceMini pieceId={pieceId} size={16} />}
           </div>
         ))}
 
         {/* overflow: pieces waiting to enter the visible queue */}
-        {queue.length > nextIdx + 5 && (
+        {queue.length > nextIdx + 6 && (
           <div className="queue-overflow">
-            {queue.slice(nextIdx + 5).map((pid, i) => (
+            {queue.slice(nextIdx + 6).map((pid, i) => (
               <span
                 key={i}
                 className="queue-chip"

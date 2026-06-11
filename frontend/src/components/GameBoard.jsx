@@ -15,7 +15,7 @@ function drawFromQueue(queue, idx) {
   return idx < queue.length ? queue[idx] : null;
 }
 
-export default function GameBoard({ initialBoard, queue, onComplete, onQueueView, onLedger, reqText, reqsDone, keys, handling }) {
+export default function GameBoard({ initialBoard, queue, onComplete, onQueueView, onLedger, reqText, reqsDone, keys, handling, sidePanel }) {
   const [playBoard, setPlayBoard]       = useState(() => initialBoard.map(r => [...r]));
   const [consumedIdx, setConsumedIdx]   = useState(1);
   const [currentPiece, setCurrentPiece] = useState(queue[0] ?? null);
@@ -42,13 +42,8 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
   // one snapshot per locked piece, for undo
   const historyRef = useRef([]);
 
-  // circuit's last_action_was_rotation flag: set by a successful rotation,
-  // cleared by a successful shift/soft-drop, untouched by hold, reset per piece
   const lastRotateRef = useRef(false);
 
-  // global key handling — no need to focus the board. Ignores keys typed
-  // into inputs or while a modal is open; keyup always passes (stopping DAS
-  // is always safe).
   const handlersRef = useRef({});
   handlersRef.current = { down: handleKeyDown, up: handleKeyUp, stopAll: () => das.stopAll() };
 
@@ -127,8 +122,12 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     for (const { row: pr, col: pc } of getPieceCells(piece, rot, landRow, col)) tmp[pr][pc] = piece;
     const newBoard = clearLines(tmp);
 
-    // mirror circuit lock_piece: t-spin only counts if the piece couldn't drop
+    // mirror circuit lock_piece: t-spin only counts if the piece couldn't drop.
+    // Snapshot the rotation flag NOW — the updater below runs later, after the
+    // ref has been reset for the next piece.
     const linesCleared = tmp.filter(r => r.every(c => c !== EMPTY)).length;
+    const wasSpin = lastRotateRef.current && landRow === row;
+    const heldOccupied = held != null;
     setLedger(prev => lockLedger(prev, {
       boardBefore: board,
       boardCleared: newBoard,
@@ -136,8 +135,8 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
       pieceId: piece,
       landRow,
       col,
-      lastActionRotate: lastRotateRef.current && landRow === row,
-      heldOccupied: held != null,
+      lastActionRotate: wasSpin,
+      heldOccupied,
     }));
     lastRotateRef.current = false;
 
@@ -237,11 +236,6 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
   }
 
   function doHold() {
-    // Moves before a hold are moot — the outgoing piece's position is
-    // discarded — so they're deleted from the record. Hold chains also
-    // cancel pairwise (a swap undoes a swap); the only irreversible part is
-    // a first-hold from an empty slot, which consumes a queue piece. So the
-    // canonical record is at most two HOLDs.
     const startHeldEmpty = turnStartRef.current.held == null;
     const n = currentActions.filter(a => a === ACTION_HOLD).length + 1;
     const canonical = startHeldEmpty ? ((n - 1) % 2) + 1 : n % 2;
@@ -313,6 +307,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
               max 32 moves per piece — piece reset
             </div>
           )}
+          {sidePanel}
         </div>
 
         <div className="board-column">
