@@ -185,9 +185,10 @@ function App() {
     }
   }
 
+  // login is optional: anonymous users can publish and prove; solves are
+  // only recorded against an account when logged in
   function handleProveClick() {
     if (!secretMoves) return;
-    if (!user) { setShowAuthModal(true); return; }
     runProve();
   }
 
@@ -335,7 +336,11 @@ function App() {
                     </div>
                   )}
                   {secretMoves && reqsDone && !user && (
-                    <div className="solve-hint">log in to submit your proof</div>
+                    <div className="solve-hint">
+                      {view === 'play'
+                        ? 'anonymous — log in to record your solve'
+                        : 'publishing anonymously — log in to claim your puzzle'}
+                    </div>
                   )}
                 </>
               ) : null}

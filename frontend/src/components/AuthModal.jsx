@@ -12,6 +12,20 @@ export default function AuthModal({ onAuthed, onClose }) {
   async function submit(e) {
     e.preventDefault();
     if (!username || !password || busy) return;
+    if (mode === 'register') {
+      if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+        setError('username: letters, numbers, _ and - only');
+        return;
+      }
+      if (password.length < 8) {
+        setError('password must be at least 8 characters');
+        return;
+      }
+      if (password.toLowerCase() === username.toLowerCase()) {
+        setError('password cannot be your username');
+        return;
+      }
+    }
     setBusy(true);
     setError(null);
     try {
@@ -63,7 +77,11 @@ export default function AuthModal({ onAuthed, onClose }) {
             value={password}
             onChange={e => setPassword(e.target.value)}
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            maxLength={128}
           />
+          {mode === 'register' && (
+            <div className="auth-hint">at least 8 characters</div>
+          )}
 
           {error && <div className="auth-error">{error}</div>}
 

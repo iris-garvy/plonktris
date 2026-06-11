@@ -44,6 +44,13 @@
 .auth-input:focus { border-color: var(--pink); }
 .auth-input::placeholder { color: var(--text-muted); }
 
+.auth-hint {
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  margin-top: -4px;
+}
+
 .auth-error {
   font-size: 10px;
   color: #ff6a8a;

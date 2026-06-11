@@ -16,3 +16,5 @@ plonky2 = { version = "1.1", default-features = false }
 tower-http = { version = "0.5", features = ["cors"] }
 rayon = "1.8"
 num_cpus = "1.16"
+argon2 = "0.5"
+rustrict = "0.7"
