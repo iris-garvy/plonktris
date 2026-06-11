@@ -81,12 +81,80 @@ html, body {
   margin-left: 4px;
 }
 
+/* ── View tabs (browse / create) ── */
+.view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 16px;
+}
+
 /* ── Stage tabs ── */
 .stage-tabs {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.play-title {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── User box / login ── */
+.login-btn {
+  margin-left: 8px;
+  background: none;
+  border: 1px solid var(--lavender);
+  color: var(--lavender);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.login-btn:hover { background: rgba(181, 165, 255, 0.1); }
+
+.user-box {
+  margin-left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+}
+
+.user-name {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--lavender);
+  letter-spacing: 0.05em;
+}
+
+.user-logout {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.user-logout:hover { color: #ff6a8a; }
+
+/* ── Browse layout ── */
+.browse-main {
+  display: block;
 }
 
 .stage-tab {

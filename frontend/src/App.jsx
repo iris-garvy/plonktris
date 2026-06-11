@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import './App.css';
 import { usePlonkyProver } from './usePlonkyProver';
 import TetrisBoard from './components/TetrisBoard';
@@ -6,10 +6,13 @@ import ProofPanel from './components/ProofPanel';
 import RequirementsModal from './components/RequirementsModal';
 import GameBoard from './components/GameBoard';
 import QueueEditor from './components/QueueEditor';
+import BrowsePage from './components/BrowsePage';
+import AuthModal from './components/AuthModal';
+import KeybindingsModal from './components/KeybindingsModal';
 import { boardToUint8, movesToUint8, clearLines, BOARD_COLS, BOARD_ROWS } from './tetrisUtils';
 import { emptyLedger, requirementsMet } from './tetrisLedger';
-import KeybindingsModal from './components/KeybindingsModal';
 import { loadBindings, saveBindings, loadHandling, saveHandling } from './keybindings';
+import { api, getToken, setToken } from './api';
 
 const emptyBoard = () =>
   Array.from({ length: BOARD_ROWS }, () => new Array(BOARD_COLS).fill(0));
@@ -33,41 +36,92 @@ function requirementsProgress(requirements, ledger) {
 function App() {
   const { prove, isReady, isProving, error } = usePlonkyProver();
 
+  // ── top-level view: browse other puzzles / create your own / play one ──
+  const [view, setView] = useState('browse'); // 'browse' | 'create' | 'play'
+
+  // ── auth ──
+  const [user, setUser] = useState(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  useEffect(() => {
+    if (!getToken()) return;
+    api.me()
+      .then(setUser)
+      .catch(() => setToken(null)); // stale token
+  }, []);
+
+  function handleLogout() {
+    api.logout().catch(() => {});
+    setToken(null);
+    setUser(null);
+  }
+
+  // ── create-mode state (the puzzle being authored) ──
   const [board, setBoard] = useState(emptyBoard);
   const [queue, setQueue] = useState([1, 1, 1, 1, 2]);
   const [requirements, setRequirements] = useState([0, 0, 0, 0, 0, 0, 0, 0]);
+  const [puzzleName, setPuzzleName] = useState('');
+  const [stage, setStage] = useState('edit'); // 'edit' | 'solve' within create
 
-  // live piece-flow view reported by whichever board is active (incl. holds)
+  // ── play-mode state (someone else's puzzle, converted to frontend formats) ──
+  const [playPuzzle, setPlayPuzzle] = useState(null);
+
+  // ── shared solve/play state ──
   const [queueView, setQueueView] = useState({ current: null, nextIdx: 0 });
-
-  // frontend mirror of the circuit's ledger, reported by GameBoard each lock
   const [ledger, setLedger] = useState(emptyLedger);
-
-  const [stage, setStage]             = useState('edit');
   const [secretMoves, setSecretMoves] = useState(null);
-  const [proof, setProof]             = useState(null);
-  const [proofError, setProofError]   = useState(null);
+  const [proof, setProof] = useState(null);
+  const [proofError, setProofError] = useState(null);
 
-  // requirements are entered once, in a popup, at first prove
-  const [showReqModal, setShowReqModal]   = useState(false);
+  const [showReqModal, setShowReqModal] = useState(false);
   const [reqsConfirmed, setReqsConfirmed] = useState(false);
 
-  // keybindings + handling (persisted to localStorage)
+  // ── keybindings + handling ──
   const [keys, setKeys] = useState(loadBindings);
   const [handling, setHandling] = useState(loadHandling);
   const [showKeysModal, setShowKeysModal] = useState(false);
 
-  function handleKeysChange(next) {
-    setKeys(next);
-    saveBindings(next);
+  function handleKeysChange(next) { setKeys(next); saveBindings(next); }
+  function handleHandlingChange(next) { setHandling(next); saveHandling(next); }
+
+  function resetRunState() {
+    setLedger(emptyLedger());
+    setSecretMoves(null);
+    setProof(null);
+    setProofError(null);
   }
 
-  function handleHandlingChange(next) {
-    setHandling(next);
-    saveHandling(next);
+  // ── view transitions ──
+  function gotoBrowse() {
+    resetRunState();
+    setPlayPuzzle(null);
+    setView('browse');
   }
 
-  // ── edit board cell paint ──
+  function gotoCreate() {
+    resetRunState();
+    setPlayPuzzle(null);
+    setView('create');
+  }
+
+  function openPlay(puzzle) {
+    // server formats → frontend formats: occupancy bits → gray cells,
+    // prover piece ids 0-6 → frontend ids 1-7
+    const rows = Array.from({ length: BOARD_ROWS }, (_, r) =>
+      Array.from({ length: BOARD_COLS }, (_, c) =>
+        puzzle.board[r * BOARD_COLS + c] ? 8 : 0
+      )
+    );
+    setPlayPuzzle({
+      ...puzzle,
+      boardRows: rows,
+      queueIds: puzzle.queue.map(id => id + 1),
+    });
+    resetRunState();
+    setView('play');
+  }
+
+  // ── create: edit board handlers ──
   const handleCellToggle = useCallback((row, col, value) => {
     setBoard(prev => {
       const next = prev.map(r => [...r]);
@@ -76,7 +130,6 @@ function App() {
     });
   }, []);
 
-  // ── edit piece placement (called from TetrisBoard after hard-drop) ──
   function handleEditPiecePlaced(placedCells, pieceId) {
     setBoard(prev => {
       const next = prev.map(r => [...r]);
@@ -85,49 +138,47 @@ function App() {
     });
   }
 
-  function handleQueueChange(newQueue) {
-    setQueue(newQueue);
-  }
-
-  // ── stage transitions ──
-  // requirements are set in a popup before entering solve mode
+  // ── create: stage transitions ──
   function handleStartSolving() {
     if (queue.length === 0) return;
     setShowReqModal(true);
   }
 
-  function enterSolveMode() {
-    setLedger(emptyLedger());
-    setSecretMoves(null);
-    setProof(null);
-    setProofError(null);
-    setStage('play');
+  function handleReqModalSubmit() {
+    setShowReqModal(false);
+    setReqsConfirmed(true);
+    resetRunState();
+    setStage('solve');
   }
 
   function handleBackToEdit() {
-    setSecretMoves(null);
-    setProof(null);
-    setProofError(null);
+    resetRunState();
     setReqsConfirmed(false);
     setShowReqModal(false);
     setStage('edit');
   }
 
-  function handleMovesComplete(moves) {
-    setSecretMoves(moves);
-  }
-
   // ── proving ──
-  async function runProve(reqs) {
+  async function runProve() {
     if (!secretMoves) return;
     setProof(null);
     setProofError(null);
     try {
-      const boardBytes = boardToUint8(board);
-      const queueBytes = new Uint8Array(queue.map(id => id - 1));
-      const reqBytes   = new Uint8Array(reqs);
+      let boardBytes, queueBytes, reqBytes, extra;
+      if (view === 'play') {
+        // prove against the puzzle's exact public inputs
+        boardBytes = new Uint8Array(playPuzzle.board);
+        queueBytes = new Uint8Array(playPuzzle.queue);
+        reqBytes   = new Uint8Array(playPuzzle.requirements);
+        extra = { token: getToken(), puzzleId: playPuzzle.id };
+      } else {
+        boardBytes = boardToUint8(board);
+        queueBytes = new Uint8Array(queue.map(id => id - 1));
+        reqBytes   = new Uint8Array(requirements);
+        extra = { token: getToken(), name: puzzleName || 'untitled' };
+      }
       const movesBytes = movesToUint8(secretMoves);
-      const result = await prove(boardBytes, queueBytes, reqBytes, movesBytes, 'server');
+      const result = await prove(boardBytes, queueBytes, reqBytes, movesBytes, 'server', extra);
       setProof(result);
     } catch (e) {
       setProofError(e);
@@ -136,17 +187,18 @@ function App() {
 
   function handleProveClick() {
     if (!secretMoves) return;
-    runProve(requirements);
+    if (!user) { setShowAuthModal(true); return; }
+    runProve();
   }
 
-  function handleReqModalSubmit() {
-    setShowReqModal(false);
-    setReqsConfirmed(true);
-    enterSolveMode();
-  }
+  // ── derived ──
+  const activeReqs = view === 'play' ? playPuzzle?.requirements : requirements;
+  const reqsDone   = activeReqs ? requirementsMet(ledger, activeReqs) : false;
+  const showProgress = view === 'play' || reqsConfirmed;
+  const reqSummary = showProgress && activeReqs ? requirementsProgress(activeReqs, ledger) : null;
 
-  const reqSummary = reqsConfirmed ? requirementsProgress(requirements, ledger) : null;
-  const reqsDone   = requirementsMet(ledger, requirements);
+  const inGame = view === 'create' || view === 'play';
+  const solving = view === 'play' || (view === 'create' && stage === 'solve');
 
   return (
     <div className="app">
@@ -156,97 +208,148 @@ function App() {
           <span className="logo-text">PLONKTRIS</span>
           <span className="logo-bracket">]</span>
         </div>
-        <div className="header-sub">zero-knowledge tetris puzzle prover</div>
+
+        <nav className="view-tabs">
+          <button
+            className={`stage-tab ${view === 'browse' ? 'active' : ''}`}
+            onClick={gotoBrowse}
+          >
+            BROWSE
+          </button>
+          <button
+            className={`stage-tab ${view === 'create' ? 'active' : ''}`}
+            onClick={gotoCreate}
+          >
+            CREATE
+          </button>
+        </nav>
 
         <div className="stage-tabs">
-          <button
-            className={`stage-tab ${stage === 'edit' ? 'active' : ''}`}
-            onClick={() => stage === 'play' && handleBackToEdit()}
-          >
-            01 EDIT
-          </button>
-          <span className="stage-sep">→</span>
-          <button
-            className={`stage-tab ${stage === 'play' ? 'active' : ''}`}
-            onClick={() => stage === 'edit' && handleStartSolving()}
-            disabled={queue.length === 0}
-          >
-            02 SOLVE
-          </button>
+          {view === 'create' && (
+            <>
+              <button
+                className={`stage-tab ${stage === 'edit' ? 'active' : ''}`}
+                onClick={() => stage === 'solve' && handleBackToEdit()}
+              >
+                01 EDIT
+              </button>
+              <span className="stage-sep">→</span>
+              <button
+                className={`stage-tab ${stage === 'solve' ? 'active' : ''}`}
+                onClick={() => stage === 'edit' && handleStartSolving()}
+                disabled={queue.length === 0}
+              >
+                02 SOLVE
+              </button>
+            </>
+          )}
+          {view === 'play' && playPuzzle && (
+            <span className="play-title">{playPuzzle.name} · by {playPuzzle.creator ?? 'anonymous'}</span>
+          )}
+
           <button className="keys-open-btn" onClick={() => setShowKeysModal(true)} title="Keybindings">
             ⌨
           </button>
+
+          {user ? (
+            <div className="user-box">
+              <span className="user-name">{user.username}</span>
+              <button className="user-logout" onClick={handleLogout} title="Log out">✕</button>
+            </div>
+          ) : (
+            <button className="login-btn" onClick={() => setShowAuthModal(true)}>
+              log in
+            </button>
+          )}
         </div>
       </header>
 
-      <main className="app-main">
-        {/* LEFT (spacer keeps the board centered) */}
-        <aside className="sidebar sidebar-left" />
+      {view === 'browse' ? (
+        <main className="app-main browse-main">
+          <BrowsePage onPlay={openPlay} />
+        </main>
+      ) : (
+        <main className="app-main">
+          {/* LEFT (spacer keeps the board centered) */}
+          <aside className="sidebar sidebar-left" />
 
-        {/* CENTER: board */}
-        <section className="board-section">
-          {stage === 'edit' ? (
-            <TetrisBoard
-              board={board}
-              onCellToggle={handleCellToggle}
-              onPiecePlaced={handleEditPiecePlaced}
-              onQueueView={setQueueView}
-              queue={queue}
-              keys={keys}
-              handling={handling}
-            />
-          ) : (
-            <GameBoard
-              initialBoard={board}
-              queue={queue}
-              onComplete={handleMovesComplete}
-              onQueueView={setQueueView}
-              onLedger={setLedger}
-              reqText={reqSummary}
-              reqsDone={reqsDone}
-              keys={keys}
-              handling={handling}
-            />
-          )}
-        </section>
-
-        {/* RIGHT: queue (always) + proof panel (solve mode) */}
-        <aside className="sidebar sidebar-right">
-          <QueueEditor
-            queue={queue}
-            onQueueChange={stage === 'edit' ? handleQueueChange : undefined}
-            currentPiece={queueView.current}
-            nextIdx={queueView.nextIdx}
-          />
-          <div className="right-proof">
-            {stage === 'edit' ? (
-              <button
-                className="start-solving-btn"
-                onClick={handleStartSolving}
-                disabled={queue.length === 0}
-              >
-                ▶ solve
-              </button>
+          {/* CENTER: board */}
+          <section className="board-section">
+            {view === 'create' && stage === 'edit' ? (
+              <TetrisBoard
+                board={board}
+                onCellToggle={handleCellToggle}
+                onPiecePlaced={handleEditPiecePlaced}
+                onBoardSet={setBoard}
+                onQueueView={setQueueView}
+                queue={queue}
+                keys={keys}
+                handling={handling}
+              />
             ) : (
-              <>
-                <ProofPanel
-                  isReady={isReady}
-                  isProving={isProving}
-                  error={error || proofError}
-                  proof={proof}
-                  onProve={handleProveClick}
-                  disabled={!secretMoves || !reqsDone}
-                />
-                {secretMoves && !reqsDone && (
-                  <div className="solve-hint">
-                    conditions not met — edit and try again
-                  </div>
-                )}
-              </>
+              <GameBoard
+                key={view === 'play' ? playPuzzle.id : 'create-solve'}
+                initialBoard={view === 'play' ? playPuzzle.boardRows : board}
+                queue={view === 'play' ? playPuzzle.queueIds : queue}
+                onComplete={setSecretMoves}
+                onQueueView={setQueueView}
+                onLedger={setLedger}
+                reqText={reqSummary}
+                reqsDone={reqsDone}
+                keys={keys}
+                handling={handling}
+              />
             )}
-          </div>
-        </aside>
-      </main>
+          </section>
+
+          {/* RIGHT: queue (always) + action block */}
+          <aside className="sidebar sidebar-right">
+            <QueueEditor
+              queue={view === 'play' ? playPuzzle.queueIds : queue}
+              onQueueChange={view === 'create' && stage === 'edit' ? setQueue : undefined}
+              currentPiece={queueView.current}
+              nextIdx={queueView.nextIdx}
+            />
+            <div className="right-proof">
+              {view === 'create' && stage === 'edit' ? (
+                <button
+                  className="start-solving-btn"
+                  onClick={handleStartSolving}
+                  disabled={queue.length === 0}
+                >
+                  ▶ solve
+                </button>
+              ) : solving ? (
+                <>
+                  <ProofPanel
+                    isReady={isReady}
+                    isProving={isProving}
+                    error={error || proofError}
+                    proof={proof}
+                    onProve={handleProveClick}
+                    disabled={!secretMoves || !reqsDone}
+                  />
+                  {secretMoves && !reqsDone && (
+                    <div className="solve-hint">
+                      conditions not met — undo and try again
+                    </div>
+                  )}
+                  {secretMoves && reqsDone && !user && (
+                    <div className="solve-hint">log in to submit your proof</div>
+                  )}
+                </>
+              ) : null}
+            </div>
+          </aside>
+        </main>
+      )}
+
+      {showAuthModal && (
+        <AuthModal
+          onAuthed={setUser}
+          onClose={() => setShowAuthModal(false)}
+        />
+      )}
 
       {showKeysModal && (
         <KeybindingsModal
@@ -262,6 +365,8 @@ function App() {
         <RequirementsModal
           requirements={requirements}
           onChange={setRequirements}
+          name={puzzleName}
+          onNameChange={setPuzzleName}
           onSubmit={handleReqModalSubmit}
           onCancel={() => setShowReqModal(false)}
         />

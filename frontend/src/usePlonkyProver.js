@@ -44,7 +44,7 @@ export function usePlonkyProver() {
         return () => worker.terminate();
     }, []);
 
-    const prove = useCallback((board, queue, requirements, secretMoves, mode) => {
+    const prove = useCallback((board, queue, requirements, secretMoves, mode, extra = {}) => {
         const id = crypto.randomUUID();
 
         setIsProving(true);
@@ -60,7 +60,10 @@ export function usePlonkyProver() {
                 queue,
                 requirements,
                 secretMoves,
-                mode
+                mode,
+                token: extra.token,
+                puzzleId: extra.puzzleId,
+                name: extra.name,
             });
         });
     }, []);

@@ -4,11 +4,11 @@ import {
   getPieceCells, hardDrop, isValidPlacement, rotate, spawnCol,
 } from '../tetrisUtils';
 import { useDasArr } from '../useDasArr';
-import { normKey } from '../keybindings';
+import { keySig, normKey, baseKey } from '../keybindings';
 import PieceMini from './PieceMini';
 import './TetrisBoard.css';
 
-export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onQueueView, queue, keys, handling }) {
+export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoardSet, onQueueView, queue, keys, handling }) {
   const [selectedPaint, setSelectedPaint] = useState(1);
 
   // piece flow (same model as solve mode, minus move recording)
@@ -19,12 +19,18 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onQueu
   const [pieceRow, setPieceRow]         = useState(0);
   const [pieceCol, setPieceCol]         = useState(() => spawnCol(queue[0]));
 
+  // turn-start snapshot + per-placement history for undo / clear
+  const turnStartRef = useRef({ piece: queue[0] ?? null, held: null, queuePos: 1 });
+  const historyRef   = useRef([]);
+
   // restart the flow whenever the queue is edited
   useEffect(() => {
     setQueuePos(1);
     setCurrentPiece(queue[0] ?? null);
     setHeld(null);
     setRotation(0); setPieceRow(0); setPieceCol(spawnCol(queue[0]));
+    turnStartRef.current = { piece: queue[0] ?? null, held: null, queuePos: 1 };
+    historyRef.current = [];
   }, [queue]);
 
   // keep the queue sidebar in sync with the real piece flow (incl. holds)
@@ -94,16 +100,46 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onQueu
     if (!currentPiece) return;
     const landRow = hardDrop(board, currentPiece, rotation, pieceRow, pieceCol);
     if (!isValidPlacement(board, currentPiece, rotation, landRow, pieceCol)) return;
+
+    historyRef.current.push({ board: board.map(r => [...r]), ...turnStartRef.current });
     onPiecePlaced(getPieceCells(currentPiece, rotation, landRow, pieceCol), currentPiece);
+
     let next = queue[queuePos] ?? null;
+    let heldAfter = held;
     if (next == null && held != null) {
       // queue exhausted — spawn the held piece
       next = held;
+      heldAfter = null;
       setHeld(null);
     }
+    turnStartRef.current = { piece: next, held: heldAfter, queuePos: queuePos + 1 };
     setCurrentPiece(next);
     setQueuePos(p => p + 1);
     setRotation(0); setPieceRow(0); setPieceCol(spawnCol(next));
+  }
+
+  function undoEdit() {
+    const h = historyRef.current.pop();
+    if (!h) return;
+    das.stopAll();
+    onBoardSet(h.board.map(r => [...r]));
+    setCurrentPiece(h.piece);
+    setHeld(h.held);
+    setQueuePos(h.queuePos);
+    turnStartRef.current = { piece: h.piece, held: h.held, queuePos: h.queuePos };
+    setRotation(0); setPieceRow(0); setPieceCol(spawnCol(h.piece));
+  }
+
+  function clearBoard() {
+    // undoable: snapshot the current state first
+    historyRef.current.push({ board: board.map(r => [...r]), ...turnStartRef.current });
+    das.stopAll();
+    onBoardSet(Array.from({ length: BOARD_ROWS }, () => new Array(BOARD_COLS).fill(EMPTY)));
+    setCurrentPiece(queue[0] ?? null);
+    setHeld(null);
+    setQueuePos(1);
+    turnStartRef.current = { piece: queue[0] ?? null, held: null, queuePos: 1 };
+    setRotation(0); setPieceRow(0); setPieceCol(spawnCol(queue[0]));
   }
 
   function holdPiece() {
@@ -130,7 +166,7 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onQueu
   }, handling);
 
   function handleKeyDown(e) {
-    const k = normKey(e.key);
+    const k = keySig(e);
     if (k === keys.left || k === keys.right || k === keys.softDrop) {
       e.preventDefault();
       if (e.repeat) return;
@@ -140,17 +176,19 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onQueu
       return;
     }
     if (e.repeat) return;
-    if (k === keys.rotateCw)  { e.preventDefault(); rotatePiece(true);  return; }
-    if (k === keys.rotateCcw) { e.preventDefault(); rotatePiece(false); return; }
-    if (k === keys.hold)      { e.preventDefault(); holdPiece();        return; }
-    if (k === keys.place)     { e.preventDefault(); placePiece();       }
+    if (k === keys.undo)       { e.preventDefault(); undoEdit();         return; }
+    if (k === keys.clearBoard) { e.preventDefault(); clearBoard();       return; }
+    if (k === keys.rotateCw)   { e.preventDefault(); rotatePiece(true);  return; }
+    if (k === keys.rotateCcw)  { e.preventDefault(); rotatePiece(false); return; }
+    if (k === keys.hold)       { e.preventDefault(); holdPiece();        return; }
+    if (k === keys.place)      { e.preventDefault(); placePiece();       }
   }
 
   function handleKeyUp(e) {
     const k = normKey(e.key);
-    if (k === keys.left)     das.stop('left');
-    if (k === keys.right)    das.stop('right');
-    if (k === keys.softDrop) das.stop('down');
+    if (k === baseKey(keys.left))     das.stop('left');
+    if (k === baseKey(keys.right))    das.stop('right');
+    if (k === baseKey(keys.softDrop)) das.stop('down');
   }
 
   return (

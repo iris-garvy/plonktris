@@ -21,23 +21,27 @@ export function saveHandling(handling) {
 }
 
 export const DEFAULT_BINDINGS = {
-  left:      'ArrowLeft',
-  right:     'ArrowRight',
-  softDrop:  'ArrowDown',
-  rotateCw:  'ArrowUp',
-  rotateCcw: 'z',
-  hold:      'c',
-  place:     ' ',
+  left:       'ArrowLeft',
+  right:      'ArrowRight',
+  softDrop:   'ArrowDown',
+  rotateCw:   'ArrowUp',
+  rotateCcw:  'z',
+  hold:       'c',
+  place:      ' ',
+  undo:       'mod+z',
+  clearBoard: 'Backspace',
 };
 
 export const BINDING_LABELS = {
-  left:      'move left',
-  right:     'move right',
-  softDrop:  'soft drop',
-  rotateCw:  'rotate cw',
-  rotateCcw: 'rotate ccw',
-  hold:      'hold',
-  place:     'place',
+  left:       'move left',
+  right:      'move right',
+  softDrop:   'soft drop',
+  rotateCw:   'rotate cw',
+  rotateCcw:  'rotate ccw',
+  hold:       'hold',
+  place:      'place',
+  undo:       'undo',
+  clearBoard: 'clear board (edit)',
 };
 
 // single chars compare lowercase so shift state doesn't matter
@@ -45,7 +49,20 @@ export function normKey(key) {
   return key.length === 1 ? key.toLowerCase() : key;
 }
 
+// binding signature for an event: cmd and ctrl both count as "mod"
+export function keySig(e) {
+  const mod = e.metaKey || e.ctrlKey ? 'mod+' : '';
+  return mod + normKey(e.key);
+}
+
+// the un-modified key of a binding (for keyup matching, where the modifier
+// may already have been released)
+export function baseKey(binding) {
+  return binding.split('+').pop();
+}
+
 export function keyLabel(key) {
+  if (key.startsWith('mod+')) return `⌘/^ ${keyLabel(key.slice(4))}`;
   switch (key) {
     case ' ':          return 'SPACE';
     case 'ArrowLeft':  return '←';

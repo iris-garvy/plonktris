@@ -11,7 +11,7 @@ init().then(async () => {
 });
 
 onmessage = async function(e) {
-    const { id, board, queue, requirements, secretMoves, mode } = e.data;  // <-- destructure id
+    const { id, board, queue, requirements, secretMoves, mode, token, puzzleId, name } = e.data;
 
     if (!wasmReady) {
         postMessage({ type: "error", id, error: "WASM not ready yet" });
@@ -23,14 +23,19 @@ onmessage = async function(e) {
             const proof = prove_requirements(board, queue, requirements, secretMoves);
             postMessage({ type: "proof", id, proof });
         } else if (mode === "server") {
+            const headers = { "Content-Type": "application/json" };
+            if (token) headers["Authorization"] = `Bearer ${token}`;
             const res = await fetch(`${SERVER_URL}/request`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                    board: Array.from(board), 
-                    queue: Array.from(queue), 
-                    requirements: Array.from(requirements), 
-                    actions: Array.from(secretMoves) })
+                headers,
+                body: JSON.stringify({
+                    board: Array.from(board),
+                    queue: Array.from(queue),
+                    requirements: Array.from(requirements),
+                    actions: Array.from(secretMoves),
+                    // publish mode: name set; solve mode: puzzle_id set
+                    name: puzzleId ? undefined : (name || 'untitled'),
+                    puzzle_id: puzzleId || undefined })
             });
             if (!res.ok) throw new Error(`submit failed: ${res.statusText}`);
             const { proof_id } = await res.json();

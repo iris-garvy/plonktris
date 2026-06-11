@@ -18,6 +18,22 @@
   gap: 14px;
 }
 
+.puzzle-name-input {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  color: var(--pink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 7px 9px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.puzzle-name-input:focus { border-color: var(--pink); }
+.puzzle-name-input::placeholder { color: var(--text-muted); font-weight: 400; }
+
 .modal-actions {
   display: flex;
   gap: 8px;

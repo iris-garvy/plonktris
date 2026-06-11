@@ -6,7 +6,7 @@ import {
   ACTION_SD, ACTION_HOLD, ACTION_NOOP, MAX_ACTIONS, clearLines, spawnCol,
 } from '../tetrisUtils';
 import { useDasArr } from '../useDasArr';
-import { normKey } from '../keybindings';
+import { keySig, normKey, baseKey } from '../keybindings';
 import { emptyLedger, lockLedger } from '../tetrisLedger';
 import PieceMini from './PieceMini';
 import './GameBoard.css';
@@ -38,6 +38,9 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     baseActions: [],
   });
   const warnTimerRef = useRef(null);
+
+  // one snapshot per locked piece, for undo
+  const historyRef = useRef([]);
 
   // circuit's last_action_was_rotation flag: set by a successful rotation,
   // cleared by a successful shift/soft-drop, untouched by hold, reset per piece
@@ -111,6 +114,14 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
   function doPlace(board, piece, rot, row, col, actions, consumed, soFar) {
     const landRow = hardDrop(board, piece, rot, row, col);
     if (!isValidPlacement(board, piece, rot, landRow, col)) return;
+
+    // snapshot the state at this turn's start so the lock can be undone
+    historyRef.current.push({
+      board: board.map(r => [...r]),
+      ledger,
+      placedMoves: soFar,
+      ...turnStartRef.current,
+    });
 
     const tmp = board.map(r => [...r]);
     for (const { row: pr, col: pc } of getPieceCells(piece, rot, landRow, col)) tmp[pr][pc] = piece;
@@ -202,6 +213,29 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     }
   }
 
+  function undoTurn() {
+    const h = historyRef.current.pop();
+    if (!h) return;
+    das.stopAll();
+    setPlayBoard(h.board.map(r => [...r]));
+    setLedger(h.ledger);
+    setPlacedMoves(h.placedMoves);
+    setConsumedIdx(h.consumedIdx);
+    setCurrentPiece(h.piece);
+    setHeld(h.held);
+    setCurrentActions([...h.baseActions]);
+    setRotation(0); setPieceRow(0); setPieceCol(spawnCol(h.piece));
+    turnStartRef.current = {
+      piece: h.piece, held: h.held,
+      consumedIdx: h.consumedIdx, baseActions: h.baseActions,
+    };
+    lastRotateRef.current = false;
+    if (done) {
+      setDone(false);
+      onComplete?.(null); // solve is no longer complete
+    }
+  }
+
   function doHold() {
     // Moves before a hold are moot — the outgoing piece's position is
     // discarded — so they're deleted from the record. Hold chains also
@@ -227,7 +261,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
   }
 
   function handleKeyDown(e) {
-    const k = normKey(e.key);
+    const k = keySig(e);
 
     if (k === keys.left || k === keys.right || k === keys.softDrop) {
       e.preventDefault();
@@ -238,7 +272,12 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
       return;
     }
 
-    if (e.repeat || done || currentPiece == null) return;
+    if (e.repeat) return;
+
+    // undo works even after the last piece locks
+    if (k === keys.undo) { e.preventDefault(); undoTurn(); return; }
+
+    if (done || currentPiece == null) return;
 
     if (k === keys.rotateCw)  { e.preventDefault(); doRotate(true);  return; }
     if (k === keys.rotateCcw) { e.preventDefault(); doRotate(false); return; }
@@ -250,10 +289,12 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
   }
 
   function handleKeyUp(e) {
+    // match on the unmodified key so a modifier press/release mid-hold
+    // can't leave auto-repeat running
     const k = normKey(e.key);
-    if (k === keys.left)     das.stop('left');
-    if (k === keys.right)    das.stop('right');
-    if (k === keys.softDrop) das.stop('down');
+    if (k === baseKey(keys.left))     das.stop('left');
+    if (k === baseKey(keys.right))    das.stop('right');
+    if (k === baseKey(keys.softDrop)) das.stop('down');
   }
 
   return (

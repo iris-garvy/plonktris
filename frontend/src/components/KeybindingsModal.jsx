@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BINDING_LABELS, DEFAULT_BINDINGS, DEFAULT_HANDLING, keyLabel, normKey } from '../keybindings';
+import { BINDING_LABELS, DEFAULT_BINDINGS, DEFAULT_HANDLING, keyLabel, keySig } from '../keybindings';
 import './KeybindingsModal.css';
 
 function clamp(value, min, max) {
@@ -18,7 +18,9 @@ export default function KeybindingsModal({ bindings, onChange, handling, onHandl
         setListening(null);
         return;
       }
-      const key = normKey(e.key);
+      // pure modifier presses keep listening for the real key
+      if (['Shift', 'Control', 'Meta', 'Alt'].includes(e.key)) return;
+      const key = keySig(e);
       const next = { ...bindings };
       // if the key is already bound elsewhere, swap so nothing goes unbound
       const conflict = Object.keys(next).find(a => next[a] === key && a !== listening);
