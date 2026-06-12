@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import './App.css';
 import { usePlonkyProver } from './usePlonkyProver';
-import TetrisBoard from './components/TetrisBoard';
+import TetrisBoard, { type QueueView } from './components/TetrisBoard';
 import ProofPanel from './components/ProofPanel';
 import RequirementsModal from './components/RequirementsModal';
 import GameBoard from './components/GameBoard';
@@ -9,17 +9,26 @@ import QueueEditor from './components/QueueEditor';
 import BrowsePage from './components/BrowsePage';
 import AuthModal from './components/AuthModal';
 import KeybindingsModal from './components/KeybindingsModal';
-import { boardToUint8, movesToUint8, clearLines, BOARD_COLS, BOARD_ROWS } from './tetrisUtils';
-import { emptyLedger, requirementsMet } from './tetrisLedger';
-import { loadBindings, saveBindings, loadHandling, saveHandling } from './keybindings';
-import { api, getToken, setToken } from './api';
+import { boardToUint8, movesToUint8, clearLines, BOARD_COLS, BOARD_ROWS, type Board, type CellPos, type SecretMoves } from './tetrisUtils';
+import { emptyLedger, requirementsMet, type Ledger, type Requirements } from './tetrisLedger';
+import { loadBindings, saveBindings, loadHandling, saveHandling, type Bindings, type Handling } from './keybindings';
+import { api, getToken, setToken, type Puzzle, type User } from './api';
 
-const emptyBoard = () =>
+const emptyBoard = (): Board =>
   Array.from({ length: BOARD_ROWS }, () => new Array(BOARD_COLS).fill(0));
 
 const REQ_NAMES = ['TSS', 'TSD', 'TST', 'TETRIS', 'PC', 'ATTACK', 'COMBO'];
 
-function requirementsProgress(requirements, ledger) {
+type View = 'browse' | 'create' | 'play';
+type Stage = 'edit' | 'solve';
+
+/** A fetched puzzle plus its frontend-format conversions. */
+interface PlayPuzzle extends Puzzle {
+  boardRows: Board;
+  queueIds: number[];
+}
+
+function requirementsProgress(requirements: Requirements, ledger: Ledger): string {
   const counts = [
     ledger.tss, ledger.tsd, ledger.tst, ledger.tetris,
     ledger.pc, ledger.attack, ledger.maxCombo,
@@ -36,9 +45,9 @@ function App() {
   const { prove, isReady, isProving, error } = usePlonkyProver();
 
   // index
-  const [view, setView] = useState('browse');
+  const [view, setView] = useState<View>('browse');
 
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
@@ -54,31 +63,31 @@ function App() {
     setUser(null);
   }
 
-  //create mode
-  const [board, setBoard] = useState(emptyBoard);
-  const [queue, setQueue] = useState([1, 2, 3, 4, 5, 6, 7]);
-  const [requirements, setRequirements] = useState([0, 0, 0, 0, 0, 0, 0, 0]);
+  // create mode
+  const [board, setBoard] = useState<Board>(emptyBoard);
+  const [queue, setQueue] = useState<number[]>([1, 2, 3, 4, 5, 6, 7]);
+  const [requirements, setRequirements] = useState<Requirements>([0, 0, 0, 0, 0, 0, 0, 0]);
   const [puzzleName, setPuzzleName] = useState('');
-  const [stage, setStage] = useState('edit'); // 'edit' | 'solve' within create
+  const [stage, setStage] = useState<Stage>('edit');
 
-  const [playPuzzle, setPlayPuzzle] = useState(null);
+  const [playPuzzle, setPlayPuzzle] = useState<PlayPuzzle | null>(null);
 
-  //solve/play
-  const [queueView, setQueueView] = useState({ current: null, nextIdx: 0 });
-  const [ledger, setLedger] = useState(emptyLedger);
-  const [secretMoves, setSecretMoves] = useState(null);
-  const [proof, setProof] = useState(null);
-  const [proofError, setProofError] = useState(null);
+  // solve/play
+  const [queueView, setQueueView] = useState<QueueView>({ current: null, nextIdx: 0 });
+  const [ledger, setLedger] = useState<Ledger>(emptyLedger);
+  const [secretMoves, setSecretMoves] = useState<SecretMoves | null>(null);
+  const [proof, setProof] = useState<unknown>(null);
+  const [proofError, setProofError] = useState<unknown>(null);
 
   const [showReqModal, setShowReqModal] = useState(false);
   const [reqsConfirmed, setReqsConfirmed] = useState(false);
 
-  const [keys, setKeys] = useState(loadBindings);
-  const [handling, setHandling] = useState(loadHandling);
+  const [keys, setKeys] = useState<Bindings>(loadBindings);
+  const [handling, setHandling] = useState<Handling>(loadHandling);
   const [showKeysModal, setShowKeysModal] = useState(false);
 
-  function handleKeysChange(next) { setKeys(next); saveBindings(next); }
-  function handleHandlingChange(next) { setHandling(next); saveHandling(next); }
+  function handleKeysChange(next: Bindings) { setKeys(next); saveBindings(next); }
+  function handleHandlingChange(next: Handling) { setHandling(next); saveHandling(next); }
 
   function resetRunState() {
     setLedger(emptyLedger());
@@ -99,7 +108,7 @@ function App() {
     setView('create');
   }
 
-  function openPlay(puzzle) {
+  function openPlay(puzzle: Puzzle) {
     // server formats → frontend formats: occupancy bits → gray cells,
     // prover piece ids 0-6 → frontend ids 1-7
     const rows = Array.from({ length: BOARD_ROWS }, (_, r) =>
@@ -116,7 +125,7 @@ function App() {
     setView('play');
   }
 
-  const handleCellToggle = useCallback((row, col, value) => {
+  const handleCellToggle = useCallback((row: number, col: number, value: number) => {
     setBoard(prev => {
       const next = prev.map(r => [...r]);
       next[row][col] = value ?? 0;
@@ -124,7 +133,7 @@ function App() {
     });
   }, []);
 
-  function handleEditPiecePlaced(placedCells, pieceId) {
+  function handleEditPiecePlaced(placedCells: CellPos[], pieceId: number) {
     setBoard(prev => {
       const next = prev.map(r => [...r]);
       for (const { row, col } of placedCells) next[row][col] = pieceId;
@@ -156,8 +165,9 @@ function App() {
     setProof(null);
     setProofError(null);
     try {
-      let boardBytes, queueBytes, reqBytes, extra;
-      if (view === 'play') {
+      let boardBytes: Uint8Array, queueBytes: Uint8Array, reqBytes: Uint8Array;
+      let extra: { token: string | null; puzzleId?: string; name?: string };
+      if (view === 'play' && playPuzzle) {
         boardBytes = new Uint8Array(playPuzzle.board);
         queueBytes = new Uint8Array(playPuzzle.queue);
         reqBytes   = new Uint8Array(playPuzzle.requirements);
@@ -185,9 +195,6 @@ function App() {
   const reqsDone   = activeReqs ? requirementsMet(ledger, activeReqs) : false;
   const showProgress = view === 'play' || reqsConfirmed;
   const reqSummary = showProgress && activeReqs ? requirementsProgress(activeReqs, ledger) : null;
-
-  const inGame = view === 'create' || view === 'play';
-  const solving = view === 'play' || (view === 'create' && stage === 'solve');
 
   return (
     <div className="app">
@@ -283,9 +290,9 @@ function App() {
               />
             ) : (
               <GameBoard
-                key={view === 'play' ? playPuzzle.id : 'create-solve'}
-                initialBoard={view === 'play' ? playPuzzle.boardRows : board}
-                queue={view === 'play' ? playPuzzle.queueIds : queue}
+                key={view === 'play' ? playPuzzle?.id : 'create-solve'}
+                initialBoard={view === 'play' && playPuzzle ? playPuzzle.boardRows : board}
+                queue={view === 'play' && playPuzzle ? playPuzzle.queueIds : queue}
                 onComplete={setSecretMoves}
                 onQueueView={setQueueView}
                 onLedger={setLedger}
@@ -324,7 +331,7 @@ function App() {
           {/* RIGHT: the queue */}
           <aside className="sidebar sidebar-right">
             <QueueEditor
-              queue={view === 'play' ? playPuzzle.queueIds : queue}
+              queue={view === 'play' && playPuzzle ? playPuzzle.queueIds : queue}
               onQueueChange={view === 'create' && stage === 'edit' ? setQueue : undefined}
               nextIdx={queueView.nextIdx}
             />

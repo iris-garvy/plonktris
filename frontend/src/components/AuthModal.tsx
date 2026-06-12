@@ -1,15 +1,20 @@
-import { useState } from 'react';
-import { api, setToken } from '../api';
+import { useState, type SubmitEvent } from 'react';
+import { api, setToken, type User } from '../api';
 import './AuthModal.css';
 
-export default function AuthModal({ onAuthed, onClose }) {
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
+interface AuthModalProps {
+  onAuthed: (user: User) => void;
+  onClose: () => void;
+}
+
+export default function AuthModal({ onAuthed, onClose }: AuthModalProps) {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function submit(e) {
+  async function submit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!username || !password || busy) return;
     if (mode === 'register') {
@@ -35,7 +40,7 @@ export default function AuthModal({ onAuthed, onClose }) {
       onAuthed(user);
       onClose();
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }

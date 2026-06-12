@@ -1,22 +1,23 @@
 import { useState, useEffect } from 'react';
-import { api } from '../api';
+import { api, type Puzzle } from '../api';
 import { PIECE_TYPES } from '../tetrisUtils';
+import type { CSSProperties } from 'react';
 import './BrowsePage.css';
 
 const REQ_NAMES = ['TSS', 'TSD', 'TST', 'TETRIS', 'PC', 'ATTACK', 'COMBO'];
 const ID_TO_LETTER = ['I', 'O', 'T', 'S', 'Z', 'L', 'J']; // prover ids 0-6
 
-function reqChips(requirements) {
+function reqChips(requirements: number[]): string[] {
   const chips = requirements
     .slice(0, 7)
     .map((v, i) => (v > 0 ? `${REQ_NAMES[i]} ${v}` : null))
-    .filter(Boolean);
+    .filter((c): c is string => c !== null);
   if (requirements[7]) chips.push('NO HOLD');
   return chips;
 }
 
 // tiny 10x20 preview from the 210 occupancy bits (row 0 = hidden spawn row)
-function BoardPreview({ board }) {
+function BoardPreview({ board }: { board: number[] }) {
   return (
     <div className="puzzle-preview">
       {Array.from({ length: 20 }, (_, r) =>
@@ -31,9 +32,14 @@ function BoardPreview({ board }) {
   );
 }
 
-function PuzzleCard({ puzzle, onPlay }) {
+interface PuzzleCardProps {
+  puzzle: Puzzle;
+  onPlay: (puzzle: Puzzle) => void;
+}
+
+function PuzzleCard({ puzzle, onPlay }: PuzzleCardProps) {
   return (
-    <div className="puzzle-card">
+    <div className="puzzle-card" onDoubleClick={() => onPlay(puzzle)}>
       <BoardPreview board={puzzle.board} />
       <div className="puzzle-info">
         <div className="puzzle-name">{puzzle.name}</div>
@@ -44,7 +50,7 @@ function PuzzleCard({ puzzle, onPlay }) {
             <span
               key={i}
               className="puzzle-queue-chip"
-              style={{ '--pc': PIECE_TYPES[pid + 1]?.color ?? '#666' }}
+              style={{ '--pc': PIECE_TYPES[pid + 1]?.color ?? '#666' } as CSSProperties}
             >
               {ID_TO_LETTER[pid] ?? '?'}
             </span>
@@ -70,15 +76,15 @@ function PuzzleCard({ puzzle, onPlay }) {
   );
 }
 
-export default function BrowsePage({ onPlay }) {
-  const [puzzles, setPuzzles] = useState(null);
-  const [error, setError] = useState(null);
+export default function BrowsePage({ onPlay }: { onPlay: (puzzle: Puzzle) => void }) {
+  const [puzzles, setPuzzles] = useState<Puzzle[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     api.listPuzzles()
       .then(({ puzzles }) => { if (!cancelled) setPuzzles(puzzles); })
-      .catch(err => { if (!cancelled) setError(err.message); });
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : String(err)); });
     return () => { cancelled = true; };
   }, []);
 

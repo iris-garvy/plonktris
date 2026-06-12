@@ -1,6 +1,15 @@
 import './ProofPanel.css';
 
-export default function ProofPanel({ isReady, isProving, error, proof, onProve, disabled }) {
+interface ProofPanelProps {
+  isReady: boolean;
+  isProving: boolean;
+  error: unknown;
+  proof: unknown;
+  onProve: () => void;
+  disabled: boolean;
+}
+
+export default function ProofPanel({ isProving, error, proof, onProve, disabled }: ProofPanelProps) {
   return (
     <div className="proof-panel">
       <button
@@ -18,14 +27,14 @@ export default function ProofPanel({ isReady, isProving, error, proof, onProve, 
         )}
       </button>
 
-      {error && (
+      {!!error && (
         <div className="proof-error">
           <div className="error-label">ERROR</div>
-          <div className="error-body">{error.toString()}</div>
+          <div className="error-body">{String(error)}</div>
         </div>
       )}
 
-      {proof && !error && (
+      {!!proof && !error && (
         <div className="proof-success">
           <div className="success-label">✓ PROOF VALID</div>
         </div>

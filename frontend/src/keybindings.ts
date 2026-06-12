@@ -1,9 +1,14 @@
 const STORAGE_KEY = 'plonktris-keybindings';
 const HANDLING_KEY = 'plonktris-handling';
 
-export const DEFAULT_HANDLING = { das: 150, arr: 30 };
+export interface Handling {
+  das: number;
+  arr: number;
+}
 
-export function loadHandling() {
+export const DEFAULT_HANDLING: Handling = { das: 150, arr: 30 };
+
+export function loadHandling(): Handling {
   try {
     const saved = JSON.parse(localStorage.getItem(HANDLING_KEY) ?? '{}');
     return { ...DEFAULT_HANDLING, ...saved };
@@ -12,7 +17,7 @@ export function loadHandling() {
   }
 }
 
-export function saveHandling(handling) {
+export function saveHandling(handling: Handling): void {
   try {
     localStorage.setItem(HANDLING_KEY, JSON.stringify(handling));
   } catch {
@@ -20,7 +25,14 @@ export function saveHandling(handling) {
   }
 }
 
-export const DEFAULT_BINDINGS = {
+export type BindingAction =
+  | 'left' | 'right' | 'softDrop'
+  | 'rotateCw' | 'rotateCcw'
+  | 'hold' | 'place' | 'undo' | 'clearBoard';
+
+export type Bindings = Record<BindingAction, string>;
+
+export const DEFAULT_BINDINGS: Bindings = {
   left:       'ArrowLeft',
   right:      'ArrowRight',
   softDrop:   'ArrowDown',
@@ -32,7 +44,7 @@ export const DEFAULT_BINDINGS = {
   clearBoard: 'Backspace',
 };
 
-export const BINDING_LABELS = {
+export const BINDING_LABELS: Record<BindingAction, string> = {
   left:       'move left',
   right:      'move right',
   softDrop:   'soft drop',
@@ -45,23 +57,23 @@ export const BINDING_LABELS = {
 };
 
 // single chars compare lowercase so shift state doesn't matter
-export function normKey(key) {
+export function normKey(key: string): string {
   return key.length === 1 ? key.toLowerCase() : key;
 }
 
 // binding signature for an event: cmd and ctrl both count as "mod"
-export function keySig(e) {
+export function keySig(e: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey'>): string {
   const mod = e.metaKey || e.ctrlKey ? 'mod+' : '';
   return mod + normKey(e.key);
 }
 
 // the un-modified key of a binding (for keyup matching, where the modifier
 // may already have been released)
-export function baseKey(binding) {
-  return binding.split('+').pop();
+export function baseKey(binding: string): string {
+  return binding.split('+').pop() ?? binding;
 }
 
-export function keyLabel(key) {
+export function keyLabel(key: string): string {
   if (key.startsWith('mod+')) return `⌘/^ ${keyLabel(key.slice(4))}`;
   switch (key) {
     case ' ':          return 'SPACE';
@@ -73,7 +85,7 @@ export function keyLabel(key) {
   }
 }
 
-export function loadBindings() {
+export function loadBindings(): Bindings {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
     return { ...DEFAULT_BINDINGS, ...saved };
@@ -82,7 +94,7 @@ export function loadBindings() {
   }
 }
 
-export function saveBindings(bindings) {
+export function saveBindings(bindings: Bindings): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(bindings));
   } catch {

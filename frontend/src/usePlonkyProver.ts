@@ -1,26 +1,45 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
+export interface ProveExtra {
+  token?: string | null;
+  puzzleId?: string;
+  name?: string;
+}
+
+interface PendingEntry {
+  resolve: (proof: unknown) => void;
+  reject: (err: Error) => void;
+}
+
+interface WorkerMessage {
+  type: 'ready' | 'proof' | 'error';
+  id?: string;
+  proof?: unknown;
+  error?: string;
+}
+
 export function usePlonkyProver() {
     const [isReady, setIsReady] = useState(false);
     const [isProving, setIsProving] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
-    const workerRef = useRef(null);
-    const pendingRef = useRef(new Map());
+    const workerRef = useRef<Worker | null>(null);
+    const pendingRef = useRef(new Map<string, PendingEntry>());
 
     useEffect(() => {
         const worker = new Worker(
-            new URL('./prover.worker.js', import.meta.url),
+            new URL('./prover.worker.ts', import.meta.url),
             { type: 'module' }
         );
 
-        worker.onmessage = (e) => {
-            const { type, id, proof, error, } = e.data;
+        worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
+            const { type, id, proof, error } = e.data;
 
             if (type === "ready") {
                 setIsReady(true);
                 return;
             }
+            if (!id) return;
 
             const pending = pendingRef.current.get(id);
             if (!pending) return;
@@ -35,7 +54,7 @@ export function usePlonkyProver() {
                 pending.reject(new Error(error));
                 pendingRef.current.delete(id);
                 setIsProving(false);
-                setError(error);
+                setError(error ?? 'unknown error');
             }
         };
 
@@ -44,7 +63,14 @@ export function usePlonkyProver() {
         return () => worker.terminate();
     }, []);
 
-    const prove = useCallback((board, queue, requirements, secretMoves, mode, extra = {}) => {
+    const prove = useCallback((
+        board: Uint8Array,
+        queue: Uint8Array,
+        requirements: Uint8Array,
+        secretMoves: Uint8Array,
+        mode: 'browser' | 'server',
+        extra: ProveExtra = {},
+    ) => {
         const id = crypto.randomUUID();
 
         setIsProving(true);
@@ -53,7 +79,7 @@ export function usePlonkyProver() {
         return new Promise((resolve, reject) => {
             pendingRef.current.set(id, { resolve, reject });
 
-            workerRef.current.postMessage({
+            workerRef.current?.postMessage({
                 type: "prove",
                 id,
                 board,

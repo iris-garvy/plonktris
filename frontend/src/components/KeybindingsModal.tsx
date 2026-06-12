@@ -1,17 +1,28 @@
 import { useState, useEffect } from 'react';
-import { BINDING_LABELS, DEFAULT_BINDINGS, DEFAULT_HANDLING, keyLabel, keySig } from '../keybindings';
+import {
+  BINDING_LABELS, DEFAULT_BINDINGS, DEFAULT_HANDLING, keyLabel, keySig,
+  type BindingAction, type Bindings, type Handling,
+} from '../keybindings';
 import './KeybindingsModal.css';
 
-function clamp(value, min, max) {
+function clamp(value: string | number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Number(value) || 0));
 }
 
-export default function KeybindingsModal({ bindings, onChange, handling, onHandlingChange, onClose }) {
-  const [listening, setListening] = useState(null); // action awaiting a keypress
+interface KeybindingsModalProps {
+  bindings: Bindings;
+  onChange: (next: Bindings) => void;
+  handling: Handling;
+  onHandlingChange: (next: Handling) => void;
+  onClose: () => void;
+}
+
+export default function KeybindingsModal({ bindings, onChange, handling, onHandlingChange, onClose }: KeybindingsModalProps) {
+  const [listening, setListening] = useState<BindingAction | null>(null);
 
   useEffect(() => {
     if (!listening) return;
-    function onKey(e) {
+    function onKey(e: KeyboardEvent) {
       e.preventDefault();
       e.stopPropagation();
       if (e.key === 'Escape') {
@@ -23,9 +34,10 @@ export default function KeybindingsModal({ bindings, onChange, handling, onHandl
       const key = keySig(e);
       const next = { ...bindings };
       // if the key is already bound elsewhere, swap so nothing goes unbound
-      const conflict = Object.keys(next).find(a => next[a] === key && a !== listening);
-      if (conflict) next[conflict] = next[listening];
-      next[listening] = key;
+      const actions = Object.keys(next) as BindingAction[];
+      const conflict = actions.find(a => next[a] === key && a !== listening);
+      if (conflict && listening) next[conflict] = next[listening];
+      if (listening) next[listening] = key;
       onChange(next);
       setListening(null);
     }
@@ -39,7 +51,7 @@ export default function KeybindingsModal({ bindings, onChange, handling, onHandl
         <div className="keys-title">KEYBINDINGS</div>
 
         <div className="keys-list">
-          {Object.keys(BINDING_LABELS).map(action => (
+          {(Object.keys(BINDING_LABELS) as BindingAction[]).map(action => (
             <div key={action} className="keys-row">
               <span className="keys-action">{BINDING_LABELS[action]}</span>
               <button

@@ -1,7 +1,13 @@
 import { PIECE_TYPES, TETROMINOES } from '../tetrisUtils';
 
+interface PieceMiniProps {
+  pieceId: number | null;
+  size?: number;
+  dimmed?: boolean;
+}
+
 // Renders a piece cropped to its bounding box so it centers cleanly in flex parents.
-export default function PieceMini({ pieceId, size = 14, dimmed = false }) {
+export default function PieceMini({ pieceId, size = 14, dimmed = false }: PieceMiniProps) {
   const shape = pieceId != null ? TETROMINOES[pieceId]?.[0] : null;
   const color = pieceId != null ? PIECE_TYPES[pieceId]?.color : null;
 
@@ -40,7 +46,7 @@ export default function PieceMini({ pieceId, size = 14, dimmed = false }) {
             <div
               key={`${dy}-${dx}`}
               style={on ? {
-                background: color,
+                background: color ?? undefined,
                 border: `1px solid color-mix(in srgb, ${color} 70%, black)`,
                 borderRadius: 1,
               } : { borderRadius: 1 }}

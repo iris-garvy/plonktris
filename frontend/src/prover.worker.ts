@@ -10,7 +10,19 @@ init().then(async () => {
     postMessage({ type: "ready" });
 });
 
-onmessage = async function(e) {
+interface ProveRequest {
+    id: string;
+    board: Uint8Array;
+    queue: Uint8Array;
+    requirements: Uint8Array;
+    secretMoves: Uint8Array;
+    mode: 'browser' | 'server';
+    token?: string | null;
+    puzzleId?: string;
+    name?: string;
+}
+
+onmessage = async function (e: MessageEvent<ProveRequest>) {
     const { id, board, queue, requirements, secretMoves, mode, token, puzzleId, name } = e.data;
 
     if (!wasmReady) {
@@ -23,7 +35,7 @@ onmessage = async function(e) {
             const proof = prove_requirements(board, queue, requirements, secretMoves);
             postMessage({ type: "proof", id, proof });
         } else if (mode === "server") {
-            const headers = { "Content-Type": "application/json" };
+            const headers: Record<string, string> = { "Content-Type": "application/json" };
             if (token) headers["Authorization"] = `Bearer ${token}`;
             const res = await fetch(`${SERVER_URL}/request`, {
                 method: "POST",
@@ -50,18 +62,23 @@ onmessage = async function(e) {
     }
 };
 
-async function pollJob(jobId) {
+interface JobStatus {
+    status: string;
+    puzzle_id: string | null;
+    failed_reason: string | null;
+}
+
+async function pollJob(jobId: string): Promise<string | null> {
     while (true) {
         await sleep(2000);
         const res = await fetch(`${SERVER_URL}/jobs/${jobId}`);
         if (!res.ok) throw new Error(`poll failed: ${res.statusText}`);
-        const job = await res.json();
-        console.log("poll:", job);
+        const job: JobStatus = await res.json();
         if (job.status === "done") return job.puzzle_id;
         if (job.status === "failed") throw new Error(`job failed: ${job.failed_reason}`);
     }
 }
 
-function sleep(ms) {
+function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }

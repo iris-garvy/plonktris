@@ -1,26 +1,29 @@
 import './QueueEditor.css';
 import { PIECE_TYPES } from '../tetrisUtils';
 import PieceMini from './PieceMini';
+import type { CSSProperties, ChangeEvent, KeyboardEvent } from 'react';
 
-const LETTER_TO_ID = { I:1, O:2, T:3, S:4, Z:5, L:6, J:7 };
-const ID_TO_LETTER = { 1:'I', 2:'O', 3:'T', 4:'S', 5:'Z', 6:'L', 7:'J' };
+const LETTER_TO_ID: Record<string, number> = { I: 1, O: 2, T: 3, S: 4, Z: 5, L: 6, J: 7 };
+const ID_TO_LETTER: Record<number, string> = { 1: 'I', 2: 'O', 3: 'T', 4: 'S', 5: 'Z', 6: 'L', 7: 'J' };
 const MAX_QUEUE = 25;
 
-export function queueToText(queue) {
+export function queueToText(queue: number[]): string {
   return queue.map(id => ID_TO_LETTER[id] ?? '?').join('');
 }
-export function textToQueue(text) {
+export function textToQueue(text: string): number[] {
   return text.toUpperCase().split('')
     .filter(c => LETTER_TO_ID[c])
     .map(c => LETTER_TO_ID[c])
     .slice(0, MAX_QUEUE);
 }
 
-// Board grid height (21 rows × 26px) = 546px
-// Toolbar height = 36px, gap = 8px  → total board height = 590px
-// 6 boxes × BOX_H + 5 × GAP + label + chips must ≈ 590px
+interface QueueEditorProps {
+  queue: number[];
+  onQueueChange?: (queue: number[]) => void;
+  nextIdx?: number;
+}
 
-export default function QueueEditor({ queue, onQueueChange, nextIdx = 0 }) {
+export default function QueueEditor({ queue, onQueueChange, nextIdx = 0 }: QueueEditorProps) {
   const editable = !!onQueueChange;
 
   // the next 6 unconsumed queue pieces (the piece in play is on the board)
@@ -28,7 +31,7 @@ export default function QueueEditor({ queue, onQueueChange, nextIdx = 0 }) {
     pieceId: queue[nextIdx + i] ?? null,
   }));
 
-  function handleChange(e) {
+  function handleChange(e: ChangeEvent<HTMLInputElement>) {
     onQueueChange?.(textToQueue(e.target.value));
   }
 
@@ -44,6 +47,11 @@ export default function QueueEditor({ queue, onQueueChange, nextIdx = 0 }) {
         autoComplete="off"
         readOnly={!editable}
         tabIndex={editable ? 0 : -1}
+        onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+          // Enter hands control back to the board (key handling is global,
+          // it only ignores keys while an input is focused)
+          if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+        }}
       />
 
       {/* Queue column: 6 squares, overflow chips fused below */}
@@ -64,7 +72,7 @@ export default function QueueEditor({ queue, onQueueChange, nextIdx = 0 }) {
               <span
                 key={i}
                 className="queue-chip"
-                style={{ '--pc': PIECE_TYPES[pid]?.color ?? '#666' }}
+                style={{ '--pc': PIECE_TYPES[pid]?.color ?? '#666' } as CSSProperties}
               >
                 {ID_TO_LETTER[pid] ?? '?'}
               </span>

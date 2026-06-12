@@ -26,7 +26,7 @@
 .status-badge.loading .status-dot { background: var(--border); }
 
 .prove-btn {
-  width: 80px;   /* lines up with the queue column */
+  width: 87px;   /* lines up with the queue column */
   padding: 6px 0;
   background: transparent;
   border: 1px solid var(--pink);

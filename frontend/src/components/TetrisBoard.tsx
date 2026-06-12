@@ -1,19 +1,47 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode, type CSSProperties } from 'react';
 import {
-  BOARD_COLS, BOARD_ROWS, NUM_PIECES, EMPTY, PIECE_TYPES,
+  BOARD_COLS, BOARD_ROWS, EMPTY, PIECE_TYPES,
   getPieceCells, hardDrop, isValidPlacement, rotate, spawnCol,
+  type Board, type CellPos,
 } from '../tetrisUtils';
 import { useDasArr } from '../useDasArr';
-import { keySig, normKey, baseKey } from '../keybindings';
+import { keySig, normKey, baseKey, type Bindings, type Handling } from '../keybindings';
 import PieceMini from './PieceMini';
 import './TetrisBoard.css';
 
-export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoardSet, onQueueView, queue, keys, handling, sidePanel }) {
-  const [selectedPaint, setSelectedPaint] = useState(1);
+export interface QueueView {
+  current: number | null;
+  nextIdx: number;
+}
+
+interface EditTurnSnapshot {
+  piece: number | null;
+  held: number | null;
+  queuePos: number;
+}
+
+interface EditHistoryEntry extends EditTurnSnapshot {
+  board: Board;
+}
+
+interface TetrisBoardProps {
+  board: Board;
+  onCellToggle: (row: number, col: number, value: number) => void;
+  onPiecePlaced: (cells: CellPos[], pieceId: number) => void;
+  onBoardSet: (board: Board) => void;
+  onQueueView?: (view: QueueView) => void;
+  queue: number[];
+  keys: Bindings;
+  handling: Handling;
+  sidePanel?: ReactNode;
+}
+
+export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoardSet, onQueueView, queue, keys, handling, sidePanel }: TetrisBoardProps) {
+  const [selectedPaint, setSelectedPaint] = useState<number>(1);
 
   // click-drag painting: the value set on mousedown is painted onto every
   // cell the cursor passes over until mouseup
-  const paintingRef = useRef(null);
+  const paintingRef = useRef<number | null>(null);
   useEffect(() => {
     const stop = () => { paintingRef.current = null; };
     window.addEventListener('mouseup', stop);
@@ -22,15 +50,15 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
 
   // piece flow (same model as solve mode, minus move recording)
   const [queuePos, setQueuePos]         = useState(1);
-  const [currentPiece, setCurrentPiece] = useState(queue[0] ?? null);
-  const [held, setHeld]                 = useState(null);
+  const [currentPiece, setCurrentPiece] = useState<number | null>(queue[0] ?? null);
+  const [held, setHeld]                 = useState<number | null>(null);
   const [rotation, setRotation]         = useState(0);
   const [pieceRow, setPieceRow]         = useState(0);
   const [pieceCol, setPieceCol]         = useState(() => spawnCol(queue[0]));
 
   // turn-start snapshot + per-placement history for undo / clear
-  const turnStartRef = useRef({ piece: queue[0] ?? null, held: null, queuePos: 1 });
-  const historyRef   = useRef([]);
+  const turnStartRef = useRef<EditTurnSnapshot>({ piece: queue[0] ?? null, held: null, queuePos: 1 });
+  const historyRef   = useRef<EditHistoryEntry[]>([]);
 
   // restart the flow whenever the queue is edited
   useEffect(() => {
@@ -49,19 +77,19 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
 
   // global key handling — no need to focus the board. Ignores keys typed
   // into inputs or while a modal is open.
-  const handlersRef = useRef({});
+  const handlersRef = useRef<{ down: (e: KeyboardEvent) => void; up: (e: KeyboardEvent) => void; stopAll: () => void }>(null!);
   handlersRef.current = { down: handleKeyDown, up: handleKeyUp, stopAll: () => das.stopAll() };
 
   useEffect(() => {
-    function ignoring(e) {
+    function ignoring(e: KeyboardEvent) {
       const t = e.target;
       return t instanceof HTMLElement && (
         t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ||
         t.isContentEditable || t.closest('.modal-overlay')
       );
     }
-    const down = e => { if (!ignoring(e)) handlersRef.current.down(e); };
-    const up   = e => handlersRef.current.up(e);
+    const down = (e: KeyboardEvent) => { if (!ignoring(e)) handlersRef.current.down(e); };
+    const up   = (e: KeyboardEvent) => handlersRef.current.up(e);
     const blur = () => handlersRef.current.stopAll();
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
@@ -82,28 +110,27 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
   const activeSet   = new Set(activeCells.map(c => `${c.row},${c.col}`));
   const ghostSet    = new Set(ghostCells.map(c => `${c.row},${c.col}`));
 
-  function handleCellDown(row, col) {
+  function handleCellDown(row: number, col: number) {
     const cur = board[row][col];
     const value = cur === selectedPaint ? EMPTY : selectedPaint;
     paintingRef.current = value;
     onCellToggle(row, col, value);
   }
 
-  function handleCellEnter(row, col) {
+  function handleCellEnter(row: number, col: number) {
     if (paintingRef.current == null) return;
     if (board[row][col] !== paintingRef.current) {
       onCellToggle(row, col, paintingRef.current);
     }
   }
 
-
-  function shiftPiece(dir) {
+  function shiftPiece(dir: number) {
     if (!currentPiece) return;
     if (isValidPlacement(board, currentPiece, rotation, pieceRow, pieceCol + dir))
       setPieceCol(c => c + dir);
   }
 
-  function rotatePiece(cw) {
+  function rotatePiece(cw: boolean) {
     if (!currentPiece) return;
     const [nr, nrow, ncol] = rotate(board, currentPiece, rotation, pieceRow, pieceCol, cw);
     setRotation(nr); setPieceRow(nrow); setPieceCol(ncol);
@@ -162,7 +189,7 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
 
   function holdPiece() {
     if (!currentPiece) return;
-    let incoming;
+    let incoming: number | null;
     if (held === null) {
       incoming = queue[queuePos] ?? null;
       if (incoming == null) return;
@@ -183,7 +210,7 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
     down:  softDrop,
   }, handling);
 
-  function handleKeyDown(e) {
+  function handleKeyDown(e: KeyboardEvent) {
     const k = keySig(e);
     if (k === keys.left || k === keys.right || k === keys.softDrop) {
       e.preventDefault();
@@ -202,7 +229,7 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
     if (k === keys.place)      { e.preventDefault(); placePiece();       }
   }
 
-  function handleKeyUp(e) {
+  function handleKeyUp(e: KeyboardEvent) {
     const k = normKey(e.key);
     if (k === baseKey(keys.left))     das.stop('left');
     if (k === baseKey(keys.right))    das.stop('right');
@@ -263,7 +290,7 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
                     '--ghost-color':  ghostColor  ?? 'transparent',
                     gridColumn: colIdx + 1,
                     gridRow:    rowIdx, // shifted up: hidden row 0
-                  }}
+                  } as CSSProperties}
                   onMouseDown={e => { e.preventDefault(); handleCellDown(rowIdx, colIdx); }}
                   onMouseOver={() => handleCellEnter(rowIdx, colIdx)}
                 />

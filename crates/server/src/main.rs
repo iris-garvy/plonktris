@@ -378,14 +378,15 @@ async fn record_solve(
 
     // anonymous solves verify but aren't recorded
     if let Some(user_id) = user_id {
-        sqlx::query!(
-            "INSERT INTO solves (puzzle_id, user_id, proof)
-             VALUES ($1, $2, CASE WHEN EXISTS
-                 (SELECT 1 FROM solves WHERE puzzle_id = $1) THEN NULL::bytea ELSE $3 END)
-             ON CONFLICT DO NOTHING",
+        sqlx::query!("INSERT INTO solves (puzzle_id, user_id) VALUES ($1, $2) 
+        ON CONFLICT (puzzle_id, user_id) DO NOTHING",
             target,
             user_id,
-            proof,
+        )
+        .execute(&state.db).await.map_err(|e| format!("db error: {e}"))?;
+        sqlx::query!("UPDATE solves SET first_solve = true 
+        WHERE puzzle_id = $1 AND (SELECT COUNT(*) FROM solves WHERE puzzle_id = $1) = 1",
+            target,
         )
         .execute(&state.db).await.map_err(|e| format!("db error: {e}"))?;
     }

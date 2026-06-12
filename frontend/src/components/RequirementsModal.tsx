@@ -1,7 +1,17 @@
 import RequirementsEditor from './RequirementsEditor';
+import type { Requirements } from '../tetrisLedger';
 import './RequirementsModal.css';
 
-export default function RequirementsModal({ requirements, onChange, name, onNameChange, onSubmit, onCancel }) {
+interface RequirementsModalProps {
+  requirements: Requirements;
+  onChange: (next: Requirements) => void;
+  name: string;
+  onNameChange: (name: string) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+}
+
+export default function RequirementsModal({ requirements, onChange, name, onNameChange, onSubmit, onCancel }: RequirementsModalProps) {
   return (
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal-panel" onClick={e => e.stopPropagation()}>

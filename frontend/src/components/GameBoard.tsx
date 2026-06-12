@@ -1,62 +1,90 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ReactNode, type CSSProperties } from 'react';
 import {
-  BOARD_COLS, BOARD_ROWS, EMPTY, PIECE_TYPES, TETROMINOES,
+  EMPTY, PIECE_TYPES,
   getPieceCells, hardDrop, isValidPlacement, rotate,
   ACTION_LEFT, ACTION_RIGHT, ACTION_CW, ACTION_CCW,
   ACTION_SD, ACTION_HOLD, ACTION_NOOP, MAX_ACTIONS, clearLines, spawnCol,
+  type Board, type Action, type SecretMoves,
 } from '../tetrisUtils';
 import { useDasArr } from '../useDasArr';
-import { keySig, normKey, baseKey } from '../keybindings';
-import { emptyLedger, lockLedger } from '../tetrisLedger';
+import { keySig, normKey, baseKey, type Bindings, type Handling } from '../keybindings';
+import { emptyLedger, lockLedger, type Ledger } from '../tetrisLedger';
 import PieceMini from './PieceMini';
+import type { QueueView } from './TetrisBoard';
 import './GameBoard.css';
 
-function drawFromQueue(queue, idx) {
+function drawFromQueue(queue: number[], idx: number): number | null {
   return idx < queue.length ? queue[idx] : null;
 }
 
-export default function GameBoard({ initialBoard, queue, onComplete, onQueueView, onLedger, reqText, reqsDone, keys, handling, sidePanel }) {
-  const [playBoard, setPlayBoard]       = useState(() => initialBoard.map(r => [...r]));
+interface TurnSnapshot {
+  piece: number | null;
+  held: number | null;
+  consumedIdx: number;
+  baseActions: Action[];
+}
+
+interface HistoryEntry extends TurnSnapshot {
+  board: Board;
+  ledger: Ledger;
+  placedMoves: SecretMoves;
+}
+
+interface GameBoardProps {
+  initialBoard: Board;
+  queue: number[];
+  onComplete: (moves: SecretMoves | null) => void;
+  onQueueView?: (view: QueueView) => void;
+  onLedger?: (ledger: Ledger) => void;
+  reqText: string | null;
+  reqsDone: boolean;
+  keys: Bindings;
+  handling: Handling;
+  sidePanel?: ReactNode;
+}
+
+export default function GameBoard({ initialBoard, queue, onComplete, onQueueView, onLedger, reqText, reqsDone, keys, handling, sidePanel }: GameBoardProps) {
+  const [playBoard, setPlayBoard]       = useState<Board>(() => initialBoard.map(r => [...r]));
   const [consumedIdx, setConsumedIdx]   = useState(1);
-  const [currentPiece, setCurrentPiece] = useState(queue[0] ?? null);
-  const [held, setHeld]                 = useState(null);
+  const [currentPiece, setCurrentPiece] = useState<number | null>(queue[0] ?? null);
+  const [held, setHeld]                 = useState<number | null>(null);
   const [rotation, setRotation]         = useState(0);
   const [pieceRow, setPieceRow]         = useState(0);
   const [pieceCol, setPieceCol]         = useState(() => spawnCol(queue[0]));
-  const [currentActions, setCurrentActions] = useState([]);
-  const [placedMoves, setPlacedMoves]   = useState([]);
+  const [currentActions, setCurrentActions] = useState<Action[]>([]);
+  const [placedMoves, setPlacedMoves]   = useState<SecretMoves>([]);
   const [done, setDone]                 = useState(false);
-  const [ledger, setLedger]             = useState(emptyLedger);
+  const [ledger, setLedger]             = useState<Ledger>(emptyLedger);
   const [overflowWarn, setOverflowWarn] = useState(false);
 
   // snapshot of the state when the current piece spawned, so the turn can be
   // replayed from scratch when the 32-action budget runs out
-  const turnStartRef = useRef({
+  const turnStartRef = useRef<TurnSnapshot>({
     piece: queue[0] ?? null,
     held: null,
     consumedIdx: 1,
     baseActions: [],
   });
-  const warnTimerRef = useRef(null);
+  const warnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // one snapshot per locked piece, for undo
-  const historyRef = useRef([]);
+  const historyRef = useRef<HistoryEntry[]>([]);
 
   const lastRotateRef = useRef(false);
 
-  const handlersRef = useRef({});
+  const handlersRef = useRef<{ down: (e: KeyboardEvent) => void; up: (e: KeyboardEvent) => void; stopAll: () => void }>(null!);
   handlersRef.current = { down: handleKeyDown, up: handleKeyUp, stopAll: () => das.stopAll() };
 
   useEffect(() => {
-    function ignoring(e) {
+    function ignoring(e: KeyboardEvent) {
       const t = e.target;
       return t instanceof HTMLElement && (
         t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ||
         t.isContentEditable || t.closest('.modal-overlay')
       );
     }
-    const down = e => { if (!ignoring(e)) handlersRef.current.down(e); };
-    const up   = e => handlersRef.current.up(e);
+    const down = (e: KeyboardEvent) => { if (!ignoring(e)) handlersRef.current.down(e); };
+    const up   = (e: KeyboardEvent) => handlersRef.current.up(e);
     const blur = () => handlersRef.current.stopAll();
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
@@ -86,7 +114,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
   const activeSet   = new Set(activeCells.map(c => `${c.row},${c.col}`));
   const ghostSet    = new Set(ghostCells.map(c => `${c.row},${c.col}`));
 
-  function tryAddAction(action, actions) {
+  function tryAddAction(action: Action, actions: Action[]): Action[] | null {
     if (actions.length >= MAX_ACTIONS) return null;
     return [...actions, action];
   }
@@ -102,11 +130,11 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     setRotation(0); setPieceRow(0); setPieceCol(spawnCol(s.piece));
     lastRotateRef.current = false;
     setOverflowWarn(true);
-    clearTimeout(warnTimerRef.current);
+    if (warnTimerRef.current) clearTimeout(warnTimerRef.current);
     warnTimerRef.current = setTimeout(() => setOverflowWarn(false), 3000);
   }
 
-  function doPlace(board, piece, rot, row, col, actions, consumed, soFar) {
+  function doPlace(board: Board, piece: number, rot: number, row: number, col: number, actions: Action[], consumed: number, soFar: SecretMoves) {
     const landRow = hardDrop(board, piece, rot, row, col);
     if (!isValidPlacement(board, piece, rot, landRow, col)) return;
 
@@ -154,7 +182,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     }
 
     let nextPiece = drawFromQueue(queue, consumed);
-    let startActions = [];
+    let startActions: Action[] = [];
     let heldAfter = held;
     if (nextPiece == null && held != null) {
       // queue exhausted — spawn the held piece. The circuit models this as the
@@ -179,7 +207,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     setRotation(0); setPieceRow(0); setPieceCol(spawnCol(nextPiece));
   }
 
-  function moveHorizontal(dir) {
+  function moveHorizontal(dir: number) {
     if (done || currentPiece == null) return;
     if (isValidPlacement(playBoard, currentPiece, rotation, pieceRow, pieceCol + dir)) {
       const n = tryAddAction(dir < 0 ? ACTION_LEFT : ACTION_RIGHT, currentActions);
@@ -203,7 +231,8 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     down:  moveDown,
   }, handling);
 
-  function doRotate(cw) {
+  function doRotate(cw: boolean) {
+    if (currentPiece == null) return;
     const [nr, nrow, ncol] = rotate(playBoard, currentPiece, rotation, pieceRow, pieceCol, cw);
     if (nr !== rotation || nrow !== pieceRow || ncol !== pieceCol) {
       const n = tryAddAction(cw ? ACTION_CW : ACTION_CCW, currentActions);
@@ -231,7 +260,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     lastRotateRef.current = false;
     if (done) {
       setDone(false);
-      onComplete?.(null); // solve is no longer complete
+      onComplete(null); // solve is no longer complete
     }
   }
 
@@ -240,7 +269,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     const n = currentActions.filter(a => a === ACTION_HOLD).length + 1;
     const canonical = startHeldEmpty ? ((n - 1) % 2) + 1 : n % 2;
 
-    let incoming;
+    let incoming: number | null;
     if (held === null) {
       incoming = drawFromQueue(queue, consumedIdx);
       if (incoming == null) return;
@@ -254,7 +283,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     setRotation(0); setPieceRow(0); setPieceCol(spawnCol(incoming));
   }
 
-  function handleKeyDown(e) {
+  function handleKeyDown(e: KeyboardEvent) {
     const k = keySig(e);
 
     if (k === keys.left || k === keys.right || k === keys.softDrop) {
@@ -282,7 +311,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     }
   }
 
-  function handleKeyUp(e) {
+  function handleKeyUp(e: KeyboardEvent) {
     // match on the unmodified key so a modifier press/release mid-hold
     // can't leave auto-repeat running
     const k = normKey(e.key);
@@ -315,7 +344,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
         <div className="game-toolbar-row">
           {reqText && (
             <span className={`req-summary ${reqsDone ? 'met' : ''}`}>
-              {reqsDone ? '✓ ' : ''}{reqText}
+              {reqText}
             </span>
           )}
         </div>
@@ -341,7 +370,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
                     '--ghost-color':  ghostColor  ?? 'transparent',
                     gridColumn: colIdx + 1,
                     gridRow:    rowIdx, // shifted up: hidden row 0
-                  }}
+                  } as CSSProperties}
                 />
               );
             })
@@ -352,4 +381,3 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     </div>
   );
 }
-

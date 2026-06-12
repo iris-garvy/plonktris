@@ -1,3 +1,4 @@
+import type { Requirements } from '../tetrisLedger';
 import './RequirementsEditor.css';
 
 const REQ_FIELDS = [
@@ -11,15 +12,21 @@ const REQ_FIELDS = [
   { label: 'No Hold',   desc: 'Disallow hold',    idx: 7, boolean: true  },
 ];
 
-export default function RequirementsEditor({ requirements, onRequirementsChange, locked = false }) {
-  function setAt(idx, value) {
+interface RequirementsEditorProps {
+  requirements: Requirements;
+  onRequirementsChange: (next: Requirements) => void;
+  locked?: boolean;
+}
+
+export default function RequirementsEditor({ requirements, onRequirementsChange, locked = false }: RequirementsEditorProps) {
+  function setAt(idx: number, value: number | string) {
     if (locked) return;
     const next = [...requirements];
     next[idx] = Math.max(0, Math.min(255, Number(value) || 0));
     onRequirementsChange(next);
   }
 
-  function toggleBool(idx) {
+  function toggleBool(idx: number) {
     if (locked) return;
     const next = [...requirements];
     next[idx] = next[idx] ? 0 : 1;
@@ -30,7 +37,7 @@ export default function RequirementsEditor({ requirements, onRequirementsChange,
     <div className="req-editor">
       <div className="panel-label">CONDITIONS</div>
       <div className="req-list">
-        {REQ_FIELDS.map(({ label, desc, idx, boolean }) => (
+        {REQ_FIELDS.map(({ label, idx, boolean }) => (
           <div key={idx} className="req-row">
             <span className="req-label">{label}</span>
             {boolean ? (
