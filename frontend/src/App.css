@@ -54,6 +54,10 @@ html, body {
   display: flex;
   align-items: center;
   gap: 2px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
 }
 
 .logo-bracket {
@@ -137,7 +141,13 @@ html, body {
   font-weight: 700;
   color: var(--lavender);
   letter-spacing: 0.05em;
+  background: none;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 4px 0;
 }
+.user-name:hover { text-decoration: underline; }
 
 .user-logout {
   background: none;

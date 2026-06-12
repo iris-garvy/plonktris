@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
-import { api, type Puzzle } from '../api';
-import { PIECE_TYPES } from '../tetrisUtils';
 import type { CSSProperties } from 'react';
+import { PIECE_TYPES } from '../tetrisUtils';
+import type { Puzzle } from '../api';
 import './BrowsePage.css';
 
 const REQ_NAMES = ['TSS', 'TSD', 'TST', 'TETRIS', 'PC', 'ATTACK', 'COMBO'];
@@ -35,15 +34,27 @@ function BoardPreview({ board }: { board: number[] }) {
 interface PuzzleCardProps {
   puzzle: Puzzle;
   onPlay: (puzzle: Puzzle) => void;
+  /** If set, the creator name is a link to their profile. */
+  onCreator?: (username: string) => void;
+  compact?: boolean;
 }
 
-function PuzzleCard({ puzzle, onPlay }: PuzzleCardProps) {
+export default function PuzzleCard({ puzzle, onPlay, onCreator, compact }: PuzzleCardProps) {
   return (
-    <div className="puzzle-card" onDoubleClick={() => onPlay(puzzle)}>
+    <div className={`puzzle-card ${compact ? 'compact' : ''}`} onDoubleClick={() => onPlay(puzzle)}>
       <BoardPreview board={puzzle.board} />
       <div className="puzzle-info">
         <div className="puzzle-name">{puzzle.name}</div>
-        <div className="puzzle-creator">by {puzzle.creator ?? 'anonymous'}</div>
+        <div className="puzzle-creator">
+          by{' '}
+          {puzzle.creator && onCreator ? (
+            <button className="creator-link" onClick={() => onCreator(puzzle.creator!)}>
+              {puzzle.creator}
+            </button>
+          ) : (
+            puzzle.creator ?? 'anonymous'
+          )}
+        </div>
 
         <div className="puzzle-queue">
           {puzzle.queue.map((pid, i) => (
@@ -68,52 +79,10 @@ function PuzzleCard({ puzzle, onPlay }: PuzzleCardProps) {
             {puzzle.solve_count} solve{puzzle.solve_count === 1 ? '' : 's'}
           </span>
           <button className="puzzle-play-btn" onClick={() => onPlay(puzzle)}>
-            ▶ play
+            play
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-export default function BrowsePage({ onPlay }: { onPlay: (puzzle: Puzzle) => void }) {
-  const [puzzles, setPuzzles] = useState<Puzzle[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.listPuzzles()
-      .then(({ puzzles }) => { if (!cancelled) setPuzzles(puzzles); })
-      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : String(err)); });
-    return () => { cancelled = true; };
-  }, []);
-
-  if (error) {
-    return (
-      <div className="browse-status">
-        <div className="browse-error">couldn't load puzzles: {error}</div>
-        <div className="browse-hint">is the server running on :3000?</div>
-      </div>
-    );
-  }
-
-  if (puzzles == null) {
-    return <div className="browse-status">loading puzzles…</div>;
-  }
-
-  if (puzzles.length === 0) {
-    return (
-      <div className="browse-status">
-        no puzzles yet — be the first to publish one!
-      </div>
-    );
-  }
-
-  return (
-    <div className="browse-grid">
-      {puzzles.map(p => (
-        <PuzzleCard key={p.id} puzzle={p} onPlay={onPlay} />
-      ))}
     </div>
   );
 }

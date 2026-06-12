@@ -76,6 +76,7 @@
   gap: 5px;
 }
 .success-label { font-size: 11px; color: var(--pink); font-weight: 700; }
+.success-sub { font-size: 8px; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
 
 .proof-hash { display: flex; align-items: center; gap: 6px; }
 .hash-label { font-size: 9px; color: var(--text-muted); }

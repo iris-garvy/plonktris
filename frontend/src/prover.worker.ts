@@ -49,11 +49,19 @@ onmessage = async function (e: MessageEvent<ProveRequest>) {
                     name: puzzleId ? undefined : (name || 'untitled'),
                     puzzle_id: puzzleId || undefined })
             });
-            if (!res.ok) throw new Error(`submit failed: ${res.statusText}`);
+            // server validates synchronously (auth, duplicate, name, inputs)
+            // then queues the job; we resolve as soon as it's accepted and let
+            // the proving happen async — status shows on the user's profile
+            if (!res.ok) {
+                let msg = res.statusText;
+                try {
+                    const text = await res.text();
+                    try { msg = JSON.parse(text).error ?? text; } catch { msg = text || msg; }
+                } catch { /* keep statusText */ }
+                throw new Error(msg);
+            }
             const { proof_id } = await res.json();
-
-            const resultPuzzleId = await pollJob(proof_id);
-            postMessage({ type: "proof", id, proof: resultPuzzleId });
+            postMessage({ type: "proof", id, proof: { accepted: true, jobId: proof_id } });
         }
     } catch (err) {
         // JsValue errors from wasm don't have .message, they ARE the message
@@ -61,24 +69,3 @@ onmessage = async function (e: MessageEvent<ProveRequest>) {
         postMessage({ type: "error", id, error: message });
     }
 };
-
-interface JobStatus {
-    status: string;
-    puzzle_id: string | null;
-    failed_reason: string | null;
-}
-
-async function pollJob(jobId: string): Promise<string | null> {
-    while (true) {
-        await sleep(2000);
-        const res = await fetch(`${SERVER_URL}/jobs/${jobId}`);
-        if (!res.ok) throw new Error(`poll failed: ${res.statusText}`);
-        const job: JobStatus = await res.json();
-        if (job.status === "done") return job.puzzle_id;
-        if (job.status === "failed") throw new Error(`job failed: ${job.failed_reason}`);
-    }
-}
-
-function sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}

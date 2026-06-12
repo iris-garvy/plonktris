@@ -24,6 +24,25 @@ export interface Puzzle {
   created_at?: string;
 }
 
+/** An in-flight or failed submission (only returned for your own profile). */
+export interface JobInfo {
+  id: string;
+  status: 'pending' | 'proving' | 'failed';
+  kind: 'publish' | 'solve';
+  name: string;
+  failed_reason: string | null;
+  submitted_at: string;
+}
+
+/** A user's public profile: their info plus puzzles created and solved. */
+export interface UserProfile {
+  username: string;
+  created_at: string;
+  created: Puzzle[];
+  solved: Puzzle[];
+  pending: JobInfo[];
+}
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -60,6 +79,30 @@ async function request<T>(path: string, { method = 'GET', body }: RequestOptions
   return res.json() as Promise<T>;
 }
 
+export type ReqFilter = 'tspin' | 'tetris' | 'pc' | 'attack' | 'combo' | 'nohold';
+
+/** Filters for GET /puzzles — all optional. */
+export interface PuzzleFilters {
+  q?: string;
+  min_pieces?: number;
+  max_pieces?: number;
+  solved?: 'solved' | 'unsolved';  // ever solved by anyone, vs never
+  sort?: 'new' | 'solves';
+  reqs?: ReqFilter[];              // AND-combined requirement filters
+}
+
+function toQueryString(filters: PuzzleFilters): string {
+  const params = new URLSearchParams();
+  if (filters.q?.trim()) params.set('q', filters.q.trim());
+  if (filters.min_pieces != null) params.set('min_pieces', String(filters.min_pieces));
+  if (filters.max_pieces != null) params.set('max_pieces', String(filters.max_pieces));
+  if (filters.solved) params.set('solved', filters.solved);
+  if (filters.sort) params.set('sort', filters.sort);
+  if (filters.reqs?.length) params.set('reqs', filters.reqs.join(','));
+  const s = params.toString();
+  return s ? `?${s}` : '';
+}
+
 export const api = {
   register: (username: string, password: string) =>
     request<AuthResponse>('/auth/register', { method: 'POST', body: { username, password } }),
@@ -67,6 +110,9 @@ export const api = {
     request<AuthResponse>('/auth/login', { method: 'POST', body: { username, password } }),
   logout: () => request<Record<string, never>>('/auth/logout', { method: 'POST' }),
   me: () => request<User>('/auth/me'),
-  listPuzzles: () => request<{ puzzles: Puzzle[] }>('/puzzles'),
+  listPuzzles: (filters: PuzzleFilters = {}) =>
+    request<{ puzzles: Puzzle[] }>(`/puzzles${toQueryString(filters)}`),
   getPuzzle: (id: string) => request<Puzzle>(`/puzzles/${id}`),
+  getUserProfile: (username: string) =>
+    request<UserProfile>(`/users/${encodeURIComponent(username)}`),
 };

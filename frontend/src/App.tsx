@@ -6,7 +6,9 @@ import ProofPanel from './components/ProofPanel';
 import RequirementsModal from './components/RequirementsModal';
 import GameBoard from './components/GameBoard';
 import QueueEditor from './components/QueueEditor';
-import BrowsePage from './components/BrowsePage';
+import HomePage from './components/HomePage';
+import SearchPage from './components/SearchPage';
+import ProfilePage from './components/ProfilePage';
 import AuthModal from './components/AuthModal';
 import KeybindingsModal from './components/KeybindingsModal';
 import { boardToUint8, movesToUint8, clearLines, BOARD_COLS, BOARD_ROWS, type Board, type CellPos, type SecretMoves } from './tetrisUtils';
@@ -19,7 +21,7 @@ const emptyBoard = (): Board =>
 
 const REQ_NAMES = ['TSS', 'TSD', 'TST', 'TETRIS', 'PC', 'ATTACK', 'COMBO'];
 
-type View = 'browse' | 'create' | 'play';
+type View = 'home' | 'search' | 'create' | 'play' | 'profile';
 type Stage = 'edit' | 'solve';
 
 /** A fetched puzzle plus its frontend-format conversions. */
@@ -45,7 +47,8 @@ function App() {
   const { prove, isReady, isProving, error } = usePlonkyProver();
 
   // index
-  const [view, setView] = useState<View>('browse');
+  const [view, setView] = useState<View>('home');
+  const [profileUser, setProfileUser] = useState<string | null>(null);
 
   const [user, setUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -96,16 +99,29 @@ function App() {
     setProofError(null);
   }
 
-  function gotoBrowse() {
+  function gotoHome() {
     resetRunState();
     setPlayPuzzle(null);
-    setView('browse');
+    setView('home');
+  }
+
+  function gotoSearch() {
+    resetRunState();
+    setPlayPuzzle(null);
+    setView('search');
   }
 
   function gotoCreate() {
     resetRunState();
     setPlayPuzzle(null);
     setView('create');
+  }
+
+  function gotoProfile(username: string) {
+    resetRunState();
+    setPlayPuzzle(null);
+    setProfileUser(username);
+    setView('profile');
   }
 
   function openPlay(puzzle: Puzzle) {
@@ -188,6 +204,11 @@ function App() {
 
   function handleProveClick() {
     if (!secretMoves) return;
+    // publishing is gated behind login; anonymous solving is fine (unrecorded)
+    if (view === 'create' && !user) {
+      setShowAuthModal(true);
+      return;
+    }
     runProve();
   }
 
@@ -199,18 +220,18 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <div className="logo-group">
+        <button className="logo-group" onClick={gotoHome} title="Home">
           <span className="logo-bracket">[</span>
           <span className="logo-text">PLONKTRIS</span>
           <span className="logo-bracket">]</span>
-        </div>
+        </button>
 
         <nav className="view-tabs">
           <button
-            className={`stage-tab ${view === 'browse' ? 'active' : ''}`}
-            onClick={gotoBrowse}
+            className={`stage-tab ${view === 'search' ? 'active' : ''}`}
+            onClick={gotoSearch}
           >
-            BROWSE
+            SEARCH
           </button>
           <button
             className={`stage-tab ${view === 'create' ? 'active' : ''}`}
@@ -237,7 +258,14 @@ function App() {
             )
           )}
           {view === 'play' && playPuzzle && (
-            <span className="play-title">{playPuzzle.name} · by {playPuzzle.creator ?? 'anonymous'}</span>
+            <span className="play-title">
+              {playPuzzle.name} · by{' '}
+              {playPuzzle.creator ? (
+                <button className="creator-link" onClick={() => gotoProfile(playPuzzle.creator!)}>
+                  {playPuzzle.creator}
+                </button>
+              ) : 'anonymous'}
+            </span>
           )}
 
           <button className="keys-open-btn" onClick={() => setShowKeysModal(true)} title="Keybindings">
@@ -246,7 +274,13 @@ function App() {
 
           {user ? (
             <div className="user-box">
-              <span className="user-name">{user.username}</span>
+              <button
+                className="user-name"
+                onClick={() => gotoProfile(user.username)}
+                title="Your profile"
+              >
+                {user.username}
+              </button>
               <button className="user-logout" onClick={handleLogout} title="Log out">✕</button>
             </div>
           ) : (
@@ -257,9 +291,17 @@ function App() {
         </div>
       </header>
 
-      {view === 'browse' ? (
+      {view === 'home' ? (
         <main className="app-main browse-main">
-          <BrowsePage onPlay={openPlay} />
+          <HomePage onPlay={openPlay} onCreator={gotoProfile} />
+        </main>
+      ) : view === 'search' ? (
+        <main className="app-main browse-main">
+          <SearchPage onPlay={openPlay} onCreator={gotoProfile} />
+        </main>
+      ) : view === 'profile' && profileUser ? (
+        <main className="app-main browse-main">
+          <ProfilePage username={profileUser} onPlay={openPlay} onCreator={gotoProfile} />
         </main>
       ) : (
         <main className="app-main">
@@ -319,7 +361,7 @@ function App() {
                       <div className="solve-hint">
                         {view === 'play'
                           ? 'anonymous — log in to record your solve'
-                          : 'publishing anonymously — log in to claim your puzzle'}
+                          : 'log in to publish your puzzle'}
                       </div>
                     )}
                   </>

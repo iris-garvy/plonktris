@@ -1,4 +1,4 @@
-use axum::{Router, routing::{get, post}, Json, extract::State, extract::Path, http::StatusCode};
+use axum::{Router, routing::{get, post}, Json, extract::State, extract::Path, extract::Query, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use sqlx::PgPool;
@@ -57,6 +57,7 @@ async fn main() {
         .route("/auth/me", get(me))
         .route("/puzzles", get(list_puzzles))
         .route("/puzzles/:id", get(get_puzzle))
+        .route("/users/:username", get(get_user_profile))
         .layer(CorsLayer::new()
             .allow_origin(Any)
             .allow_methods(Any)
@@ -112,6 +113,11 @@ async fn request_proof(
         }
         None
     } else {
+        // publishing requires an account — anonymous solving is fine, but a
+        // new public puzzle needs an owner
+        if user_id.is_none() {
+            return Err((StatusCode::UNAUTHORIZED, "log in to publish a puzzle".into()));
+        }
 
         //puzzle name moderation
         let n = body.name.unwrap_or_default().trim().to_string();
@@ -598,9 +604,34 @@ struct PuzzleInfo {
     created_at: String,
 }
 
+#[derive(Deserialize)]
+struct PuzzleQuery {
+    q: Option<String>,
+    min_pieces: Option<i32>,
+    max_pieces: Option<i32>,
+    solved: Option<String>,  // 'solved' (ever solved) | 'unsolved' (never)
+    sort: Option<String>,    // 'solves' (most solved) | else newest
+    reqs: Option<String>,    // comma list: tspin,tetris,pc,attack,combo,nohold
+}
+
 async fn list_puzzles(
     State(state): State<Arc<AppState>>,
+    Query(query): Query<PuzzleQuery>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    // normalize: blank search / unknown enum values become None (no filter)
+    let q = query.q.filter(|s| !s.trim().is_empty());
+    let solved = query.solved.filter(|s| s == "solved" || s == "unsolved");
+
+    // requirement checkboxes: AND-combined, each narrows the result set
+    let reqs = query.reqs.unwrap_or_default();
+    let reqs: std::collections::HashSet<&str> = reqs.split(',').map(|s| s.trim()).collect();
+    let want_tspin  = reqs.contains("tspin");
+    let want_tetris = reqs.contains("tetris");
+    let want_pc     = reqs.contains("pc");
+    let want_attack = reqs.contains("attack");
+    let want_combo  = reqs.contains("combo");
+    let want_nohold = reqs.contains("nohold");
+
     let rows = sqlx::query!(
         r#"SELECT p.id, p.name, u.username AS "creator?",
                   p.board, p.queue, p.requirements, p.num_pieces,
@@ -609,8 +640,33 @@ async fn list_puzzles(
            FROM puzzles p
            LEFT JOIN users u ON u.id = p.creator_id
            LEFT JOIN solves s ON s.puzzle_id = p.id
+           WHERE ($1::text IS NULL OR p.name ILIKE '%' || $1 || '%')
+             AND ($2::int IS NULL OR p.num_pieces >= $2)
+             AND ($3::int IS NULL OR p.num_pieces <= $3)
+             AND (NOT $6::bool OR (p.tss > 0 OR p.tsd > 0 OR p.tst > 0))
+             AND (NOT $7::bool OR p.tetris > 0)
+             AND (NOT $8::bool OR p.pc > 0)
+             AND (NOT $9::bool OR p.attack > 0)
+             AND (NOT $10::bool OR p.max_combo > 0)
+             AND (NOT $11::bool OR p.no_hold)
            GROUP BY p.id, u.username
-           ORDER BY p.created_at DESC"#
+           HAVING ($4::text IS NULL
+                   OR ($4 = 'solved'   AND COUNT(s.id) > 0)
+                   OR ($4 = 'unsolved' AND COUNT(s.id) = 0))
+           ORDER BY
+             CASE WHEN $5::text = 'solves' THEN COUNT(s.id) END DESC NULLS LAST,
+             p.created_at DESC"#,
+        q,
+        query.min_pieces,
+        query.max_pieces,
+        solved,
+        query.sort,
+        want_tspin,
+        want_tetris,
+        want_pc,
+        want_attack,
+        want_combo,
+        want_nohold,
     )
     .fetch_all(&state.db)
     .await
@@ -662,6 +718,131 @@ async fn get_puzzle(
         num_pieces: r.num_pieces,
         solve_count: r.solve_count,
         created_at: r.created_at,
+    }))
+}
+
+#[derive(Serialize)]
+struct JobInfo {
+    id: String,
+    status: String,            // pending | proving | failed
+    kind: String,              // "publish" | "solve"
+    name: String,              // puzzle name (publish) or target name (solve)
+    failed_reason: Option<String>,
+    submitted_at: String,
+}
+
+#[derive(Serialize)]
+struct UserProfile {
+    username: String,
+    created_at: String,
+    created: Vec<PuzzleInfo>,
+    solved: Vec<PuzzleInfo>,
+    pending: Vec<JobInfo>,     // only populated when viewing your own profile
+}
+
+async fn get_user_profile(
+    State(state): State<Arc<AppState>>,
+    auth: Option<AuthUser>,
+    Path(username): Path<String>,
+) -> Result<Json<UserProfile>, (StatusCode, String)> {
+    let user = sqlx::query!(
+        r#"SELECT id, username,
+                  to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!"
+           FROM users WHERE LOWER(username) = LOWER($1)"#,
+        username
+    )
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?
+    .ok_or((StatusCode::NOT_FOUND, "user not found".to_string()))?;
+
+    let is_owner = auth.map(|a| a.id) == Some(user.id);
+
+    let created = sqlx::query!(
+        r#"SELECT p.id, p.name, u.username AS "creator?",
+                  p.board, p.queue, p.requirements, p.num_pieces,
+                  COUNT(s.id) AS "solve_count!",
+                  to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!"
+           FROM puzzles p
+           LEFT JOIN users u ON u.id = p.creator_id
+           LEFT JOIN solves s ON s.puzzle_id = p.id
+           WHERE p.creator_id = $1
+           GROUP BY p.id, u.username
+           ORDER BY p.created_at DESC"#,
+        user.id
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?
+    .into_iter().map(|r| PuzzleInfo {
+        id: r.id.to_string(), name: r.name, creator: r.creator,
+        board: r.board, queue: r.queue, requirements: r.requirements,
+        num_pieces: r.num_pieces, solve_count: r.solve_count, created_at: r.created_at,
+    }).collect();
+
+    let solved = sqlx::query!(
+        r#"SELECT p.id, p.name, u.username AS "creator?",
+                  p.board, p.queue, p.requirements, p.num_pieces,
+                  COUNT(s.id) AS "solve_count!",
+                  to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!"
+           FROM puzzles p
+           LEFT JOIN users u ON u.id = p.creator_id
+           LEFT JOIN solves s ON s.puzzle_id = p.id
+           WHERE p.id IN (SELECT puzzle_id FROM solves WHERE user_id = $1)
+           GROUP BY p.id, u.username
+           ORDER BY p.created_at DESC"#,
+        user.id
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?
+    .into_iter().map(|r| PuzzleInfo {
+        id: r.id.to_string(), name: r.name, creator: r.creator,
+        board: r.board, queue: r.queue, requirements: r.requirements,
+        num_pieces: r.num_pieces, solve_count: r.solve_count, created_at: r.created_at,
+    }).collect();
+
+    // in-flight / failed submissions, visible only to the profile's owner
+    let pending = if is_owner {
+        sqlx::query!(
+            r#"SELECT j.id, j.status, j.failed_reason,
+                      j.name AS job_name, j.target_puzzle_id,
+                      tp.name AS "target_name?",
+                      to_char(j.submitted, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "submitted_at!"
+               FROM jobs j
+               LEFT JOIN puzzles tp ON tp.id = j.target_puzzle_id
+               WHERE j.user_id = $1 AND j.status IN ('pending', 'proving', 'failed')
+               ORDER BY j.submitted DESC"#,
+            user.id
+        )
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?
+        .into_iter().map(|j| {
+            let is_solve = j.target_puzzle_id.is_some();
+            JobInfo {
+                id: j.id.to_string(),
+                status: j.status,
+                kind: if is_solve { "solve".into() } else { "publish".into() },
+                name: if is_solve {
+                    j.target_name.unwrap_or_else(|| "puzzle".into())
+                } else {
+                    j.job_name.unwrap_or_else(|| "untitled".into())
+                },
+                failed_reason: j.failed_reason,
+                submitted_at: j.submitted_at,
+            }
+        }).collect()
+    } else {
+        Vec::new()
+    };
+
+    Ok(Json(UserProfile {
+        username: user.username,
+        created_at: user.created_at,
+        created,
+        solved,
+        pending,
     }))
 }
 

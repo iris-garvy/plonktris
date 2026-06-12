@@ -10,20 +10,23 @@ interface ProofPanelProps {
 }
 
 export default function ProofPanel({ isProving, error, proof, onProve, disabled }: ProofPanelProps) {
+  const submitted = !!proof && !error;
   return (
     <div className="proof-panel">
       <button
         className={`prove-btn ${isProving ? 'proving' : ''}`}
         onClick={onProve}
-        disabled={isProving || disabled}
+        disabled={isProving || disabled || submitted}
       >
         {isProving ? (
           <span className="proving-inner">
             <span className="spinner" />
-            proving…
+            submitting…
           </span>
+        ) : submitted ? (
+          '✓ submitted'
         ) : (
-          '⬡ prove'
+          '⬡ submit'
         )}
       </button>
 
@@ -34,12 +37,12 @@ export default function ProofPanel({ isProving, error, proof, onProve, disabled 
         </div>
       )}
 
-      {!!proof && !error && (
+      {submitted && (
         <div className="proof-success">
-          <div className="success-label">✓ PROOF VALID</div>
+          <div className="success-label">✓ submitted — verifying</div>
+          <div className="success-sub">check your profile for the result</div>
         </div>
       )}
-
     </div>
   );
 }

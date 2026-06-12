@@ -48,6 +48,42 @@
 .preview-cell { background: var(--bg-raised); }
 .preview-cell.on { background: #8d7f8a; }
 
+/* ── Compact variant (profile page): horizontal rows across the width ── */
+.browse-grid.compact {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.puzzle-card.compact {
+  gap: 12px;
+  padding: 7px 12px;
+  align-items: center;
+}
+.puzzle-card.compact .puzzle-preview {
+  grid-template-columns: repeat(10, 2.5px);
+  grid-template-rows: repeat(20, 2.5px);
+  align-self: center;
+}
+/* lay the info out as a single horizontal line */
+.puzzle-card.compact .puzzle-info {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.puzzle-card.compact .puzzle-name {
+  font-size: 12px;
+  flex: 0 0 auto;
+  max-width: 180px;
+}
+.puzzle-card.compact .puzzle-creator { flex: 0 0 auto; white-space: nowrap; }
+.puzzle-card.compact .puzzle-queue { flex-wrap: nowrap; }
+.puzzle-card.compact .puzzle-reqs { flex-wrap: nowrap; overflow: hidden; }
+.puzzle-card.compact .puzzle-footer {
+  margin-top: 0;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
 /* info column */
 .puzzle-info {
   display: flex;
