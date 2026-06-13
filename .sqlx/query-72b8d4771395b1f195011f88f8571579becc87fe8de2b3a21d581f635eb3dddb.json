@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT u.username,\n                  COUNT(s.id) AS \"solves!\",\n                  COUNT(s.id) FILTER (WHERE s.first_solve) AS \"first_solves!\"\n           FROM users u\n           JOIN solves s ON s.user_id = u.id\n           GROUP BY u.username\n           ORDER BY COUNT(s.id) DESC, COUNT(s.id) FILTER (WHERE s.first_solve) DESC\n           LIMIT 10",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "solves!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "first_solves!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "72b8d4771395b1f195011f88f8571579becc87fe8de2b3a21d581f635eb3dddb"
+}

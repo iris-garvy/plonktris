@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, username,\n                  to_char(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS \"created_at!\"\n           FROM users WHERE LOWER(username) = LOWER($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "9211f6fb69dab61c70767d19c9e4a91c1a68c121ef1ccd598dee3f56ef8df9e8"
+}

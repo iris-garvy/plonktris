@@ -27,7 +27,10 @@ struct AppState {
 #[tokio::main]
 async fn main() {
 
-    let db = PgPool::connect("postgresql://localhost/plonktris")
+    // DATABASE_URL in the environment for deployed hosts; falls back to local dev DB
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgresql://localhost/plonktris".to_string());
+    let db = PgPool::connect(&database_url)
     .await.unwrap();
 
     println!("loading verifiers...");

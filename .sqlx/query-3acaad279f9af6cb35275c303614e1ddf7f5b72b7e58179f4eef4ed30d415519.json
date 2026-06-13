@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE jobs SET status = 'done', actions = NULL, puzzle_id = $2\n                        WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3acaad279f9af6cb35275c303614e1ddf7f5b72b7e58179f4eef4ed30d415519"
+}
