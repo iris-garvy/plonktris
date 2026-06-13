@@ -1,11 +1,10 @@
-import init, { initThreadPool, prove_requirements } from "./pkg/wasm.js";
+import init, { prove_requirements } from "./pkg/wasm.js";
 
-const SERVER_URL = "http://localhost:3000";
+const SERVER_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 let wasmReady = false;
 
-init().then(async () => {
-    await initThreadPool(navigator.hardwareConcurrency);
+init().then(() => {
     wasmReady = true;
     postMessage({ type: "ready" });
 });
@@ -32,8 +31,32 @@ onmessage = async function (e: MessageEvent<ProveRequest>) {
 
     try {
         if (mode === "browser") {
+            // prove locally, then send only the proof — the solution never leaves the browser
             const proof = prove_requirements(board, queue, requirements, secretMoves);
-            postMessage({ type: "proof", id, proof });
+            const headers: Record<string, string> = { "Content-Type": "application/json" };
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+            const res = await fetch(`${SERVER_URL}/submit`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({
+                    proof: Array.from(proof),
+                    board: Array.from(board),
+                    queue: Array.from(queue),
+                    requirements: Array.from(requirements),
+                    name: puzzleId ? undefined : (name || 'untitled'),
+                    puzzle_id: puzzleId || undefined }),
+            });
+            if (!res.ok) {
+                let msg = res.statusText;
+                try {
+                    const text = await res.text();
+                    try { msg = JSON.parse(text).error ?? text; } catch { msg = text || msg; }
+                } catch { /* keep statusText */ }
+                throw new Error(msg);
+            }
+            const { proof_id } = await res.json();
+            // secure mode verifies synchronously, so the result is already final
+            postMessage({ type: "proof", id, proof: { accepted: true, secure: true, jobId: proof_id } });
         } else if (mode === "server") {
             const headers: Record<string, string> = { "Content-Type": "application/json" };
             if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -49,9 +72,12 @@ onmessage = async function (e: MessageEvent<ProveRequest>) {
                     name: puzzleId ? undefined : (name || 'untitled'),
                     puzzle_id: puzzleId || undefined })
             });
-            // server validates synchronously (auth, duplicate, name, inputs)
-            // then queues the job; we resolve as soon as it's accepted and let
-            // the proving happen async — status shows on the user's profile
+            // 429 = fast-proving rate limit; signal the UI to offer secure proving
+            if (res.status === 429) {
+                postMessage({ type: "proof", id, proof: { rateLimited: true } });
+                return;
+            }
+            // server validates + queues; proving runs async, result shows on the profile
             if (!res.ok) {
                 let msg = res.statusText;
                 try {

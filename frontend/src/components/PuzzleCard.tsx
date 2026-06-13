@@ -78,6 +78,9 @@ export default function PuzzleCard({ puzzle, onPlay, onCreator, compact }: Puzzl
           <span className="puzzle-solves">
             {puzzle.solve_count} solve{puzzle.solve_count === 1 ? '' : 's'}
           </span>
+          <span className="puzzle-solves">
+            {puzzle.num_pieces} piece{puzzle.num_pieces === 1 ? '' : 's'}
+          </span>
           <button className="puzzle-play-btn" onClick={() => onPlay(puzzle)}>
             play
           </button>

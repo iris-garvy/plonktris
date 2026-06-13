@@ -5,7 +5,7 @@ import type { CSSProperties, ChangeEvent, KeyboardEvent } from 'react';
 
 const LETTER_TO_ID: Record<string, number> = { I: 1, O: 2, T: 3, S: 4, Z: 5, L: 6, J: 7 };
 const ID_TO_LETTER: Record<number, string> = { 1: 'I', 2: 'O', 3: 'T', 4: 'S', 5: 'Z', 6: 'L', 7: 'J' };
-const MAX_QUEUE = 25;
+const MAX_QUEUE = 21;
 
 export function queueToText(queue: number[]): string {
   return queue.map(id => ID_TO_LETTER[id] ?? '?').join('');

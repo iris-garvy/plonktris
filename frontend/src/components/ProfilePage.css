@@ -46,6 +46,41 @@
   font-style: italic;
 }
 
+/* settings */
+.profile-setting {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.profile-setting input {
+  margin-top: 2px;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  accent-color: var(--lavender);
+  cursor: pointer;
+}
+.profile-setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.profile-setting-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.03em;
+}
+.profile-setting-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 /* pending submissions */
 .pending-list {
   display: flex;
@@ -64,20 +99,10 @@
 }
 .pending-row.failed { border-left-color: #d6336c; }
 
-.pending-kind {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  min-width: 48px;
-}
-
 .pending-name {
   font-size: 12px;
   font-weight: 700;
   color: var(--text);
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

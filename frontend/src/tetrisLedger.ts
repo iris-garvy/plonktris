@@ -70,7 +70,7 @@ export function lockLedger(ledger: Ledger, {
   let attack = ATTACK_TABLE[lines];
   if (isTspin) attack += TSPIN_REWARD[lines];
 
-  const keepB2b = lines === 4 || isTspin;
+  const keepB2b = lines === 4 || (isTspin && lines > 0);
   if (keepB2b) attack += ledger.b2b;
 
   const isPc = boardCleared.every(r => r.every(c => c === EMPTY));
@@ -88,7 +88,8 @@ export function lockLedger(ledger: Ledger, {
   next.attack  += attack;
   next.maxCombo = Math.max(ledger.maxCombo, newCombo);
   next.combo    = newCombo;
-  next.b2b      = keepB2b ? 1 : 0;
+  // only a line clear touches b2b: tetris/t-spin keep it, other clears reset it
+  if (lines > 0) next.b2b = keepB2b ? 1 : 0;
   next.heldUsed = ledger.heldUsed || heldOccupied;
   return next;
 }

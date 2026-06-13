@@ -22,6 +22,10 @@
   --text-muted:    #a3928f;
 }
 
+html {
+  overflow-y: scroll;   /* always reserve the scrollbar so the layout doesn't shift between pages */
+}
+
 html, body {
   background: var(--bg-base);
   color: var(--text);
@@ -37,8 +41,11 @@ html, body {
   min-height: 100vh;
   padding: 16px 20px 24px;
   gap: 16px;
+  width: 100%;            /* fill the container so the header doesn't shift between tabs */
   max-width: 1200px;
   margin: 0 auto;
+  text-align: left;       /* undo the leftover #root text-align: center */
+  box-sizing: border-box;
 }
 
 /* ── Header ── */
@@ -52,29 +59,30 @@ html, body {
 
 .logo-group {
   display: flex;
-  align-items: center;
-  gap: 2px;
+  align-items: baseline;
+  gap: 0px;
   background: none;
   border: none;
   padding: 0;
   cursor: pointer;
 }
 
-.logo-bracket {
-  font-size: 22px;
-  font-weight: 300;
-  color: var(--lavender);
-  letter-spacing: -2px;
+.logo-mark {
+  height: 20px;
+  width: auto;
+  display: block;
+  transform: translateY(6px);   /* sit the p on the text baseline with its stem as a descender */
 }
 
-.logo-text {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  background: linear-gradient(90deg, var(--pink), var(--lavender));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.logo-word {
+  /* the logo is the lowercase p, so the word reads "plonktris" */
+  font-family: 'Charter', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  line-height: 1;
+  margin-left: 0px;
 }
 
 .header-sub {
@@ -100,14 +108,23 @@ html, body {
   gap: 6px;
 }
 
-.play-title {
+.play-board-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+.play-board-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--pink);
+  letter-spacing: 0.04em;
+}
+.play-board-creator {
   font-size: 10px;
-  color: var(--text-dim);
-  letter-spacing: 0.05em;
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
 }
 
 /* ── User box / login ── */
@@ -127,39 +144,64 @@ html, body {
 
 .login-btn:hover { background: rgba(181, 165, 255, 0.1); }
 
-.user-box {
+.user-menu {
+  position: relative;
   margin-left: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--border);
-  padding: 0px 8px;
 }
 
 .user-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 10px;
   font-weight: 700;
   color: var(--lavender);
   letter-spacing: 0.05em;
   background: none;
-  border: none;
+  border: 1px solid var(--border);
   font-family: inherit;
   cursor: pointer;
-  padding: 4px 0;
+  padding: 4px 8px;
+  transition: background 0.15s, border-color 0.15s;
 }
-.user-name:hover { text-decoration: underline; }
+.user-name:hover { background: rgba(181, 165, 255, 0.1); }
+.user-name.open { border-color: var(--lavender); background: rgba(181, 165, 255, 0.1); }
 
-.user-logout {
+.user-caret {
+  font-size: 8px;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+}
+.user-name.open .user-caret { transform: rotate(180deg); }
+
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 50;
+}
+
+.user-dropdown-item {
   background: none;
   border: none;
-  color: var(--text-muted);
+  text-align: left;
   font-family: inherit;
   font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
   cursor: pointer;
-  padding: 0 2px;
+  padding: 8px 12px;
+  transition: background 0.12s, color 0.12s;
 }
-
-.user-logout:hover { color: #d6336c; }
+.user-dropdown-item:hover { background: var(--bg-raised); color: var(--lavender); }
+.user-dropdown-item:last-child:hover { color: #d6336c; }
 
 /* ── Browse layout ── */
 .browse-main {
@@ -237,7 +279,9 @@ html, body {
 .board-section {
   flex: 0 0 auto;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
 }
 
 /* ── Shared panel label ── */

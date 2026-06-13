@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 import { usePlonkyProver } from './usePlonkyProver';
 import TetrisBoard, { type QueueView } from './components/TetrisBoard';
@@ -9,6 +9,7 @@ import QueueEditor from './components/QueueEditor';
 import HomePage from './components/HomePage';
 import SearchPage from './components/SearchPage';
 import ProfilePage from './components/ProfilePage';
+import AboutPage from './components/AboutPage';
 import AuthModal from './components/AuthModal';
 import KeybindingsModal from './components/KeybindingsModal';
 import { boardToUint8, movesToUint8, clearLines, BOARD_COLS, BOARD_ROWS, type Board, type CellPos, type SecretMoves } from './tetrisUtils';
@@ -21,7 +22,7 @@ const emptyBoard = (): Board =>
 
 const REQ_NAMES = ['TSS', 'TSD', 'TST', 'TETRIS', 'PC', 'ATTACK', 'COMBO'];
 
-type View = 'home' | 'search' | 'create' | 'play' | 'profile';
+type View = 'home' | 'search' | 'create' | 'play' | 'profile' | 'about';
 type Stage = 'edit' | 'solve';
 
 /** A fetched puzzle plus its frontend-format conversions. */
@@ -52,6 +53,8 @@ function App() {
 
   const [user, setUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!getToken()) return;
@@ -59,6 +62,18 @@ function App() {
       .then(setUser)
       .catch(() => setToken(null)); // stale token
   }, []);
+
+  // close the account dropdown on any outside click
+  useEffect(() => {
+    if (!showUserMenu) return;
+    function onClick(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [showUserMenu]);
 
   function handleLogout() {
     api.logout().catch(() => {});
@@ -72,6 +87,27 @@ function App() {
   const [requirements, setRequirements] = useState<Requirements>([0, 0, 0, 0, 0, 0, 0, 0]);
   const [puzzleName, setPuzzleName] = useState('');
   const [stage, setStage] = useState<Stage>('edit');
+
+  // client-side ("secure") proving preference (per-device)
+  const [secureProving, setSecureProving] = useState<boolean>(
+    () => localStorage.getItem('plonktris-secure-proving') === '1'
+  );
+  function handleSecureProvingChange(v: boolean) {
+    setSecureProving(v);
+    localStorage.setItem('plonktris-secure-proving', v ? '1' : '0');
+  }
+
+  // server-side fast-proving rate limit hit → offer in-browser proving instead
+  const [rateLimited, setRateLimited] = useState(false);
+
+  // warn before leaving during an in-browser proof (it dies if the tab closes)
+  const [secureProvingActive, setSecureProvingActive] = useState(false);
+  useEffect(() => {
+    if (!secureProvingActive) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [secureProvingActive]);
 
   const [playPuzzle, setPlayPuzzle] = useState<PlayPuzzle | null>(null);
 
@@ -117,6 +153,12 @@ function App() {
     setView('create');
   }
 
+  function gotoAbout() {
+    resetRunState();
+    setPlayPuzzle(null);
+    setView('about');
+  }
+
   function gotoProfile(username: string) {
     resetRunState();
     setPlayPuzzle(null);
@@ -159,6 +201,8 @@ function App() {
 
   function handleStartSolving() {
     if (queue.length === 0) return;
+    // always start the requirements modal fresh at 0
+    setRequirements([0, 0, 0, 0, 0, 0, 0, 0]);
     setShowReqModal(true);
   }
 
@@ -176,10 +220,19 @@ function App() {
     setStage('edit');
   }
 
-  async function runProve() {
+  async function runProve(secure: boolean) {
     if (!secretMoves) return;
+    // anonymous solves aren't recorded, so skip the prover entirely
+    if (view === 'play' && playPuzzle && !user) {
+      setProofError(null);
+      setProof({ localOnly: true });
+      return;
+    }
     setProof(null);
     setProofError(null);
+    setRateLimited(false);
+    // secure proving runs in-browser and dies if the tab closes — guard it
+    if (secure) setSecureProvingActive(true);
     try {
       let boardBytes: Uint8Array, queueBytes: Uint8Array, reqBytes: Uint8Array;
       let extra: { token: string | null; puzzleId?: string; name?: string };
@@ -195,21 +248,28 @@ function App() {
         extra = { token: getToken(), name: puzzleName || 'untitled' };
       }
       const movesBytes = movesToUint8(secretMoves);
-      const result = await prove(boardBytes, queueBytes, reqBytes, movesBytes, 'server', extra);
-      setProof(result);
+      const result = await prove(boardBytes, queueBytes, reqBytes, movesBytes, secure ? 'browser' : 'server', extra);
+      // server hit the per-user fast-proving limit → offer secure proving instead
+      if (result && (result as { rateLimited?: boolean }).rateLimited) {
+        setRateLimited(true);
+      } else {
+        setProof(result);
+      }
     } catch (e) {
       setProofError(e);
+    } finally {
+      setSecureProvingActive(false);
     }
   }
 
-  function handleProveClick() {
+  function handleProveClick(secure: boolean) {
     if (!secretMoves) return;
     // publishing is gated behind login; anonymous solving is fine (unrecorded)
     if (view === 'create' && !user) {
       setShowAuthModal(true);
       return;
     }
-    runProve();
+    runProve(secure);
   }
 
   const activeReqs = view === 'play' ? playPuzzle?.requirements : requirements;
@@ -221,9 +281,8 @@ function App() {
     <div className="app">
       <header className="app-header">
         <button className="logo-group" onClick={gotoHome} title="Home">
-          <span className="logo-bracket">[</span>
-          <span className="logo-text">PLONKTRIS</span>
-          <span className="logo-bracket">]</span>
+          <img className="logo-mark" src="/logo.svg" alt="" />
+          <span className="logo-word">lonktris</span>
         </button>
 
         <nav className="view-tabs">
@@ -238,6 +297,12 @@ function App() {
             onClick={gotoCreate}
           >
             CREATE
+          </button>
+          <button
+            className={`stage-tab ${view === 'about' ? 'active' : ''}`}
+            onClick={gotoAbout}
+          >
+            ABOUT
           </button>
         </nav>
 
@@ -257,31 +322,36 @@ function App() {
               </button>
             )
           )}
-          {view === 'play' && playPuzzle && (
-            <span className="play-title">
-              {playPuzzle.name} · by{' '}
-              {playPuzzle.creator ? (
-                <button className="creator-link" onClick={() => gotoProfile(playPuzzle.creator!)}>
-                  {playPuzzle.creator}
-                </button>
-              ) : 'anonymous'}
-            </span>
-          )}
-
           <button className="keys-open-btn" onClick={() => setShowKeysModal(true)} title="Keybindings">
             ⌨
           </button>
 
           {user ? (
-            <div className="user-box">
+            <div className="user-menu" ref={userMenuRef}>
               <button
-                className="user-name"
-                onClick={() => gotoProfile(user.username)}
-                title="Your profile"
+                className={`user-name ${showUserMenu ? 'open' : ''}`}
+                onClick={() => setShowUserMenu(v => !v)}
+                title="Account"
               >
                 {user.username}
+                <span className="user-caret">▾</span>
               </button>
-              <button className="user-logout" onClick={handleLogout} title="Log out">✕</button>
+              {showUserMenu && (
+                <div className="user-dropdown">
+                  <button
+                    className="user-dropdown-item"
+                    onClick={() => { setShowUserMenu(false); gotoProfile(user.username); }}
+                  >
+                    profile
+                  </button>
+                  <button
+                    className="user-dropdown-item"
+                    onClick={() => { setShowUserMenu(false); handleLogout(); }}
+                  >
+                    log out
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <button className="login-btn" onClick={() => setShowAuthModal(true)}>
@@ -295,13 +365,24 @@ function App() {
         <main className="app-main browse-main">
           <HomePage onPlay={openPlay} onCreator={gotoProfile} />
         </main>
+      ) : view === 'about' ? (
+        <main className="app-main browse-main">
+          <AboutPage onBrowse={gotoHome} onCreate={gotoCreate} />
+        </main>
       ) : view === 'search' ? (
         <main className="app-main browse-main">
           <SearchPage onPlay={openPlay} onCreator={gotoProfile} />
         </main>
       ) : view === 'profile' && profileUser ? (
         <main className="app-main browse-main">
-          <ProfilePage username={profileUser} onPlay={openPlay} onCreator={gotoProfile} />
+          <ProfilePage
+            username={profileUser}
+            onPlay={openPlay}
+            onCreator={gotoProfile}
+            isOwner={!!user && user.username.toLowerCase() === profileUser.toLowerCase()}
+            secureProving={secureProving}
+            onSecureProvingChange={handleSecureProvingChange}
+          />
         </main>
       ) : (
         <main className="app-main">
@@ -310,6 +391,19 @@ function App() {
 
           {/* CENTER: board (action block renders under the hold box) */}
           <section className="board-section">
+            {view === 'play' && playPuzzle && (
+              <div className="play-board-title">
+                <span className="play-board-name">{playPuzzle.name}</span>
+                <span className="play-board-creator">
+                  by{' '}
+                  {playPuzzle.creator ? (
+                    <button className="creator-link" onClick={() => gotoProfile(playPuzzle.creator!)}>
+                      {playPuzzle.creator}
+                    </button>
+                  ) : 'anonymous'}
+                </span>
+              </div>
+            )}
             {view === 'create' && stage === 'edit' ? (
               <TetrisBoard
                 board={board}
@@ -351,6 +445,8 @@ function App() {
                       proof={proof}
                       onProve={handleProveClick}
                       disabled={!secretMoves || !reqsDone}
+                      allowSecure={secureProving}
+                      rateLimited={rateLimited}
                     />
                     {secretMoves && !reqsDone && (
                       <div className="solve-hint">

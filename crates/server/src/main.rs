@@ -1,6 +1,9 @@
-use axum::{Router, routing::{get, post}, Json, extract::State, extract::Path, extract::Query, http::StatusCode};
+use axum::{Router, routing::{get, post}, Json, extract::State, extract::Path, extract::Query, extract::ConnectInfo, http::StatusCode};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use std::time::{Instant, Duration};
+use std::net::SocketAddr;
 use sqlx::PgPool;
 use plonky2::{field::goldilocks_field::GoldilocksField, util::serialization::DefaultGateSerializer};
 use plonky2::plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs};
@@ -16,7 +19,9 @@ use axum::{async_trait, extract::FromRequestParts, http::request::Parts};
 struct AppState {
     db: PgPool,
     verifiers: Arc<Vec<VerifierData>>,
-    new_job: Notify
+    new_job: Notify,
+    // per-IP registration timestamps, for throttling account creation
+    reg_attempts: Mutex<HashMap<String, Vec<Instant>>>,
 }
 
 #[tokio::main]
@@ -29,7 +34,7 @@ async fn main() {
     let verifiers = Arc::new(load_verifiers());
     println!("ready!");
 
-    let state = Arc::new(AppState { db: db, verifiers: verifiers, new_job: Notify::new() });
+    let state = Arc::new(AppState { db: db, verifiers: verifiers, new_job: Notify::new(), reg_attempts: Mutex::new(HashMap::new()) });
     let worker_state = state.clone();
 
     tokio::spawn(async move {
@@ -57,6 +62,8 @@ async fn main() {
         .route("/auth/me", get(me))
         .route("/puzzles", get(list_puzzles))
         .route("/puzzles/:id", get(get_puzzle))
+        .route("/stats", get(get_stats))
+        .route("/leaderboard", get(get_leaderboard))
         .route("/users/:username", get(get_user_profile))
         .layer(CorsLayer::new()
             .allow_origin(Any)
@@ -64,9 +71,11 @@ async fn main() {
             .allow_headers(Any))
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    println!("listening on port 3000");
-    axum::serve(listener, app).await.unwrap();
+    // localhost by default (TLS-terminating proxy in front); set BIND_ADDR=0.0.0.0:3000 for container hosts
+    let bind_addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
+    let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
+    println!("listening on {bind_addr}");
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await.unwrap();
 }
 
 #[derive(Deserialize)]
@@ -86,8 +95,8 @@ async fn request_proof(
 ) -> Result<Json<SubmitVerificationResponse>, (StatusCode, String)> {
     let num_pieces = body.queue.len();
     let mut req_counter = 0;
-    if num_pieces < 1 || num_pieces > 25 {
-        return Err((StatusCode::BAD_REQUEST, "num_pieces must be between 1 and 25".into()));
+    if num_pieces < 1 || num_pieces > 21 {
+        return Err((StatusCode::BAD_REQUEST, "num_pieces must be between 1 and 21".into()));
     }
     for req in 0..7 {
         req_counter += body.requirements[req];
@@ -111,10 +120,12 @@ async fn request_proof(
         if p.board != body.board || p.queue != body.queue || p.requirements != body.requirements {
             return Err((StatusCode::BAD_REQUEST, "inputs don't match the puzzle".into()));
         }
+        // anonymous solves aren't recorded, so don't burn the prover on them
+        if user_id.is_none() {
+            return Err((StatusCode::UNAUTHORIZED, "log in to record a solve".into()));
+        }
         None
     } else {
-        // publishing requires an account — anonymous solving is fine, but a
-        // new public puzzle needs an owner
         if user_id.is_none() {
             return Err((StatusCode::UNAUTHORIZED, "log in to publish a puzzle".into()));
         }
@@ -148,6 +159,35 @@ async fn request_proof(
         }
         Some(n)
     };
+
+    // over any limit, a 429 tells the client to fall back to in-browser proving
+    const MAX_QUEUE_GLOBAL: i64 = 32;  // total jobs queued/proving across all users
+    const MAX_INFLIGHT: i64 = 2;       // per-user jobs pending/proving at once
+    const MAX_PER_HOUR: i64 = 10;      // per-user server proofs per rolling hour
+
+    // global cap bounds total load regardless of how many accounts an attacker makes
+    let queue_depth = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) AS "n!" FROM jobs WHERE status IN ('pending','proving')"#
+    ).fetch_one(&state.db).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+    if queue_depth >= MAX_QUEUE_GLOBAL {
+        return Err((StatusCode::TOO_MANY_REQUESTS,
+            "the prover is busy — prove securely in your browser".into()));
+    }
+
+    if let Some(uid) = user_id {
+        let inflight = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) AS "n!" FROM jobs WHERE user_id = $1 AND status IN ('pending','proving')"#,
+            uid
+        ).fetch_one(&state.db).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+        let recent = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) AS "n!" FROM jobs WHERE user_id = $1 AND submitted > now() - interval '1 hour'"#,
+            uid
+        ).fetch_one(&state.db).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+        if inflight >= MAX_INFLIGHT || recent >= MAX_PER_HOUR {
+            return Err((StatusCode::TOO_MANY_REQUESTS,
+                "fast proving limit reached — prove securely in your browser".into()));
+        }
+    }
 
     let id = sqlx::query_scalar!(
         "INSERT INTO jobs (board, queue, requirements, actions, user_id, name, target_puzzle_id)
@@ -209,6 +249,8 @@ async fn process_next_job(worker_state: &Arc<AppState>) -> Result<bool, String> 
                         board: job.board,
                         queue: job.queue,
                         requirements: job.requirements,
+                        name: None,
+                        puzzle_id: None,
                     };
                     submit_proof(worker_state.clone(), body, job.user_id,
                         job.name.unwrap_or_else(|| "untitled".to_string())).await
@@ -277,6 +319,8 @@ struct SubmitVerificationRequest {
     board: Vec<u8>,
     queue: Vec<u8>,
     requirements: Vec<u8>,
+    name: Option<String>,             // publish mode (client-side proving)
+    puzzle_id: Option<uuid::Uuid>,    // solve mode (client-side proving)
 }
 
 #[derive(Serialize)]
@@ -287,8 +331,8 @@ struct SubmitVerificationResponse {
 
 // verify proof bytes against the verifier for this queue length
 fn verify_proof(state: &AppState, proof: &[u8], num_pieces: usize) -> Result<(), String> {
-    if num_pieces < 1 || num_pieces > 25 {
-        return Err(format!("num_pieces must be between 1 and 25"));
+    if num_pieces < 1 || num_pieces > 21 {
+        return Err(format!("num_pieces must be between 1 and 21"));
     }
     let (verifier_only, common) = &state.verifiers[num_pieces - 1];
     let verifier = VerifierCircuitData {
@@ -400,13 +444,42 @@ async fn record_solve(
     Ok(target)
 }
 
+// client-side proving: browser sends a finished proof, server only verifies + records
 async fn submit_proof_json(
     State(state): State<Arc<AppState>>,
+    auth: Option<AuthUser>,
     Json(body): Json<SubmitVerificationRequest>,
 ) -> Result<Json<SubmitVerificationResponse>, (StatusCode, String)> {
+    let num_pieces = body.queue.len();
+    if num_pieces < 1 || num_pieces > 21 {
+        return Err((StatusCode::BAD_REQUEST, "num_pieces must be between 1 and 21".into()));
+    }
+    let user_id = auth.map(|a| a.id);
 
-    let id = submit_proof(state, body, None, "untitled".to_string()).await
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let id = if let Some(target) = body.puzzle_id {
+        // solve mode — recording requires login (anonymous solves aren't recorded)
+        if user_id.is_none() {
+            return Err((StatusCode::UNAUTHORIZED, "log in to record a solve".into()));
+        }
+        record_solve(&state, body.proof, &body.board, &body.queue, &body.requirements, target, user_id)
+            .await
+            .map_err(|e| (StatusCode::BAD_REQUEST, e))?
+    } else {
+        // publish mode — requires login + name moderation
+        if user_id.is_none() {
+            return Err((StatusCode::UNAUTHORIZED, "log in to publish a puzzle".into()));
+        }
+        let n = body.name.clone().unwrap_or_default().trim().to_string();
+        let n = if n.is_empty() { "untitled".to_string() } else { n };
+        if n.len() > 64 {
+            return Err((StatusCode::BAD_REQUEST, "name must be at most 64 characters".into()));
+        }
+        if rustrict::CensorStr::is_inappropriate(n.as_str()) {
+            return Err((StatusCode::BAD_REQUEST, "pick a different puzzle name".into()));
+        }
+        submit_proof(state, body, user_id, n).await
+            .map_err(|e| (StatusCode::BAD_REQUEST, e))?
+    };
 
     Ok(Json(SubmitVerificationResponse {
         success: true,
@@ -478,10 +551,38 @@ fn bearer_token(headers: &HeaderMap) -> Result<uuid::Uuid, (StatusCode, String)>
 }
 
 
+// first X-Forwarded-For hop (set by the proxy), else the socket peer
+fn client_ip(headers: &HeaderMap, addr: SocketAddr) -> String {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| addr.ip().to_string())
+}
+
 async fn register_account(
     State(state): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(body): Json<AccountRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, String)> {
+    // per-IP throttle, before the expensive argon2 hash so floods are cheap to reject
+    const MAX_REGISTRATIONS_PER_IP_HOUR: usize = 5;
+    {
+        let ip = client_ip(&headers, addr);
+        let now = Instant::now();
+        let mut map = state.reg_attempts.lock().unwrap();
+        let entry = map.entry(ip).or_default();
+        entry.retain(|t| now.duration_since(*t) < Duration::from_secs(3600));
+        if entry.len() >= MAX_REGISTRATIONS_PER_IP_HOUR {
+            return Err((StatusCode::TOO_MANY_REQUESTS,
+                "too many accounts created from here — try again later".into()));
+        }
+        entry.push(now);
+    }
+
     if body.username.is_empty() || body.username.len() > 32 {
         return Err((StatusCode::BAD_REQUEST, "username must be 1-32 characters".into()));
     }
@@ -612,6 +713,8 @@ struct PuzzleQuery {
     solved: Option<String>,  // 'solved' (ever solved) | 'unsolved' (never)
     sort: Option<String>,    // 'solves' (most solved) | else newest
     reqs: Option<String>,    // comma list: tspin,tetris,pc,attack,combo,nohold
+    featured: Option<bool>,  // only editorially-featured puzzles
+    limit: Option<i64>,      // cap result count (used by the home dashboard rails)
 }
 
 async fn list_puzzles(
@@ -631,6 +734,7 @@ async fn list_puzzles(
     let want_attack = reqs.contains("attack");
     let want_combo  = reqs.contains("combo");
     let want_nohold = reqs.contains("nohold");
+    let want_featured = query.featured.unwrap_or(false);
 
     let rows = sqlx::query!(
         r#"SELECT p.id, p.name, u.username AS "creator?",
@@ -649,13 +753,15 @@ async fn list_puzzles(
              AND (NOT $9::bool OR p.attack > 0)
              AND (NOT $10::bool OR p.max_combo > 0)
              AND (NOT $11::bool OR p.no_hold)
+             AND (NOT $12::bool OR p.featured)
            GROUP BY p.id, u.username
            HAVING ($4::text IS NULL
                    OR ($4 = 'solved'   AND COUNT(s.id) > 0)
                    OR ($4 = 'unsolved' AND COUNT(s.id) = 0))
            ORDER BY
              CASE WHEN $5::text = 'solves' THEN COUNT(s.id) END DESC NULLS LAST,
-             p.created_at DESC"#,
+             p.created_at DESC
+           LIMIT $13"#,
         q,
         query.min_pieces,
         query.max_pieces,
@@ -667,6 +773,8 @@ async fn list_puzzles(
         want_attack,
         want_combo,
         want_nohold,
+        want_featured,
+        query.limit,
     )
     .fetch_all(&state.db)
     .await
@@ -719,6 +827,62 @@ async fn get_puzzle(
         solve_count: r.solve_count,
         created_at: r.created_at,
     }))
+}
+
+#[derive(Serialize)]
+struct SiteStats {
+    puzzles: i64,
+    solves: i64,
+    users: i64,
+}
+
+async fn get_stats(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<SiteStats>, (StatusCode, String)> {
+    let r = sqlx::query!(
+        r#"SELECT
+              (SELECT COUNT(*) FROM puzzles) AS "puzzles!",
+              (SELECT COUNT(*) FROM solves)  AS "solves!",
+              (SELECT COUNT(*) FROM users)   AS "users!""#
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+
+    Ok(Json(SiteStats { puzzles: r.puzzles, solves: r.solves, users: r.users }))
+}
+
+#[derive(Serialize)]
+struct LeaderEntry {
+    username: String,
+    solves: i64,
+    first_solves: i64,
+}
+
+async fn get_leaderboard(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let rows = sqlx::query!(
+        r#"SELECT u.username,
+                  COUNT(s.id) AS "solves!",
+                  COUNT(s.id) FILTER (WHERE s.first_solve) AS "first_solves!"
+           FROM users u
+           JOIN solves s ON s.user_id = u.id
+           GROUP BY u.username
+           ORDER BY COUNT(s.id) DESC, COUNT(s.id) FILTER (WHERE s.first_solve) DESC
+           LIMIT 10"#
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+
+    let leaders: Vec<LeaderEntry> = rows.into_iter().map(|r| LeaderEntry {
+        username: r.username,
+        solves: r.solves,
+        first_solves: r.first_solves,
+    }).collect();
+
+    Ok(Json(serde_json::json!({ "leaders": leaders })))
 }
 
 #[derive(Serialize)]
@@ -852,7 +1016,7 @@ type VerifierData = (VerifierOnlyCircuitData<PoseidonGoldilocksConfig,2>, Common
 fn load_verifiers() -> Vec<VerifierData> {
     let gate_serializer = DefaultGateSerializer;
     let mut verifiers = Vec::new();
-    for num_pieces in 1..=25 {
+    for num_pieces in 1..=21 {
         let verifier_bytes = std::fs::read(format!("verifier_data/verifier_{}.bin", num_pieces)).unwrap();
         let common_bytes = std::fs::read(format!("verifier_data/common_{}.bin", num_pieces)).unwrap();
         let verifier_only = VerifierOnlyCircuitData::from_bytes(verifier_bytes).unwrap();

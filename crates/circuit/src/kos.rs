@@ -472,7 +472,7 @@ impl GameState {
                 builder.select(BoolTarget::new_unsafe(is_max_combo), new_combo, old_ledger[6]),
                 held_used.target,
                 new_combo,
-                builder.select(is[0], old_ledger[9], keep_b2b.target)
+                keep_b2b.target
             ]
         };
 

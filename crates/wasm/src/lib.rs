@@ -6,8 +6,6 @@ use plonky2::plonk::circuit_data::{CircuitConfig};
 use wasm_bindgen::prelude::*;
 use circuit::*;
 
-pub use wasm_bindgen_rayon::init_thread_pool;
-
 
 #[wasm_bindgen]
 pub fn prove_requirements(

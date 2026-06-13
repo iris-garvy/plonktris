@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 const TOKEN_KEY = 'plonktris-token';
 
 export interface User {
@@ -89,6 +89,22 @@ export interface PuzzleFilters {
   solved?: 'solved' | 'unsolved';  // ever solved by anyone, vs never
   sort?: 'new' | 'solves';
   reqs?: ReqFilter[];              // AND-combined requirement filters
+  featured?: boolean;             // only editorially-featured puzzles
+  limit?: number;                 // cap result count
+}
+
+/** Site-wide totals for the home dashboard. */
+export interface SiteStats {
+  puzzles: number;
+  solves: number;
+  users: number;
+}
+
+/** A row in the solver leaderboard. */
+export interface LeaderEntry {
+  username: string;
+  solves: number;
+  first_solves: number;
 }
 
 function toQueryString(filters: PuzzleFilters): string {
@@ -99,6 +115,8 @@ function toQueryString(filters: PuzzleFilters): string {
   if (filters.solved) params.set('solved', filters.solved);
   if (filters.sort) params.set('sort', filters.sort);
   if (filters.reqs?.length) params.set('reqs', filters.reqs.join(','));
+  if (filters.featured) params.set('featured', 'true');
+  if (filters.limit != null) params.set('limit', String(filters.limit));
   const s = params.toString();
   return s ? `?${s}` : '';
 }
@@ -115,4 +133,6 @@ export const api = {
   getPuzzle: (id: string) => request<Puzzle>(`/puzzles/${id}`),
   getUserProfile: (username: string) =>
     request<UserProfile>(`/users/${encodeURIComponent(username)}`),
+  getStats: () => request<SiteStats>('/stats'),
+  getLeaderboard: () => request<{ leaders: LeaderEntry[] }>('/leaderboard'),
 };

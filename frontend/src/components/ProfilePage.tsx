@@ -7,6 +7,9 @@ interface ProfilePageProps {
   username: string;
   onPlay: (puzzle: Puzzle) => void;
   onCreator: (username: string) => void;
+  isOwner: boolean;
+  secureProving: boolean;
+  onSecureProvingChange: (v: boolean) => void;
 }
 
 function formatJoined(iso: string): string {
@@ -15,7 +18,9 @@ function formatJoined(iso: string): string {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export default function ProfilePage({ username, onPlay, onCreator }: ProfilePageProps) {
+export default function ProfilePage({
+  username, onPlay, onCreator, isOwner, secureProving, onSecureProvingChange,
+}: ProfilePageProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,13 +63,32 @@ export default function ProfilePage({ username, onPlay, onCreator }: ProfilePage
         </div>
       </div>
 
+      {isOwner && (
+        <section className="profile-section">
+          <div className="profile-section-label">SETTINGS</div>
+          <label className="profile-setting">
+            <input
+              type="checkbox"
+              checked={secureProving}
+              onChange={e => onSecureProvingChange(e.target.checked)}
+            />
+            <span className="profile-setting-text">
+              <span className="profile-setting-name">secure proving</span>
+              <span className="profile-setting-desc">
+                prove puzzles locally in your browser — slower, but your solution never
+                leaves your device. adds a “secure (slow)” option when you submit.
+              </span>
+            </span>
+          </label>
+        </section>
+      )}
+
       {profile.pending.length > 0 && (
         <section className="profile-section">
           <div className="profile-section-label">SUBMISSIONS</div>
           <div className="pending-list">
             {profile.pending.map(job => (
               <div key={job.id} className={`pending-row ${job.status}`}>
-                <span className="pending-kind">{job.kind === 'solve' ? 'solve' : 'publish'}</span>
                 <span className="pending-name">{job.name}</span>
                 {job.status === 'failed' ? (
                   <span className="pending-status failed" title={job.failed_reason ?? ''}>

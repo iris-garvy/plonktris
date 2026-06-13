@@ -133,9 +133,9 @@ export default function SearchPage({ onPlay, onCreator }: SearchPageProps) {
       ) : results.length === 0 ? (
         <div className="browse-status">no puzzles match your filters</div>
       ) : (
-        <div className="browse-grid">
+        <div className="browse-grid compact">
           {results.map(p => (
-            <PuzzleCard key={p.id} puzzle={p} onPlay={onPlay} onCreator={onCreator} />
+            <PuzzleCard key={p.id} puzzle={p} onPlay={onPlay} onCreator={onCreator} compact />
           ))}
         </div>
       )}

@@ -25,6 +25,36 @@
 .status-badge.ready  .status-dot { background: var(--pink); box-shadow: 0 0 5px var(--pink); }
 .status-badge.loading .status-dot { background: var(--border); }
 
+.rate-limit-note {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #c2820a;
+}
+.rate-limit-sub {
+  font-size: 8px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.secure-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 8px;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.secure-toggle input {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  accent-color: var(--lavender);
+  cursor: pointer;
+}
+
 .prove-btn {
   width: 87px;   /* lines up with the queue column */
   padding: 6px 0;
