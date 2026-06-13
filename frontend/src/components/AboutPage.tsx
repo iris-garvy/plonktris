@@ -20,7 +20,8 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
       <section className="about-hero">
         <h1 className="about-title">what's plonktris?</h1>
         <p className="about-lead">
-          Plonktris is a tetris puzzle website.
+          A tetris puzzle website where users can submit puzzles with complete privacy. Plonktris validates that puzzles are 
+          solvable but does not store solutions, so the only person who knows how to solve a puzzle is its creator.
         </p>
       </section>
 
