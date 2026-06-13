@@ -10,9 +10,9 @@ use plonky2::plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInp
 use plonky2::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData, VerifierCircuitData};
 use tokio::sync::Notify;
 use circuit::generate_proof;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::{CorsLayer, AllowOrigin, Any};
 use argon2::{password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},Argon2};
-use axum::http::{HeaderMap, header::AUTHORIZATION};
+use axum::http::{HeaderMap, HeaderValue, header::AUTHORIZATION};
 use axum::{async_trait, extract::FromRequestParts, http::request::Parts};
 
 
@@ -27,7 +27,6 @@ struct AppState {
 #[tokio::main]
 async fn main() {
 
-    // DATABASE_URL in the environment for deployed hosts; falls back to local dev DB
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://localhost/plonktris".to_string());
     let db = PgPool::connect(&database_url)
@@ -54,6 +53,19 @@ async fn main() {
         }
     });
 
+    let cors = CorsLayer::new()
+        .allow_methods(Any)
+        .allow_headers(Any)
+        .allow_origin(match std::env::var("ALLOWED_ORIGINS") {
+            Ok(origins) if !origins.trim().is_empty() => AllowOrigin::list(
+                origins
+                    .split(',')
+                    .map(|o| o.trim().parse::<HeaderValue>().expect("invalid origin in ALLOWED_ORIGINS"))
+                    .collect::<Vec<_>>(),
+            ),
+            _ => AllowOrigin::any(),
+        });
+
     let app = Router::new()
         .route("/health", get(|| async { "plonktris online" }))
         .route("/request", post(request_proof))
@@ -68,13 +80,9 @@ async fn main() {
         .route("/stats", get(get_stats))
         .route("/leaderboard", get(get_leaderboard))
         .route("/users/:username", get(get_user_profile))
-        .layer(CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any))
+        .layer(cors)
         .with_state(state);
 
-    // localhost by default (TLS-terminating proxy in front); set BIND_ADDR=0.0.0.0:3000 for container hosts
     let bind_addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
     let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
     println!("listening on {bind_addr}");

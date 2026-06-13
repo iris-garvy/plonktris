@@ -1,0 +1,7 @@
+target
+.git
+out
+frontend
+**/node_modules
+*.log
+.env
