@@ -9,7 +9,7 @@ use std::fs;
 fn main() {
     fs::create_dir_all("verifier_data").unwrap();
 
-    for num_pieces in 1..=25 {
+    for num_pieces in 1..=21 {
         println!("building circuit for {} pieces...", num_pieces);
 
         let config = CircuitConfig::standard_recursion_config();

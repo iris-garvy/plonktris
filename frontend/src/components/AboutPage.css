@@ -9,7 +9,7 @@
 .about-hero {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0px;
   padding-bottom: 18px;
   border-bottom: 1px solid var(--border);
 }
@@ -17,7 +17,7 @@
   font-size: 26px;
   font-weight: 800;
   letter-spacing: 0.02em;
-  background: linear-gradient(90deg, var(--pink), var(--lavender));
+  background: var(--pink);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -26,6 +26,7 @@
   font-size: 14px;
   line-height: 1.7;
   color: var(--text-dim);
+  transform: translateY(-10px);
 }
 .about-lead em { color: var(--pink); font-style: normal; font-weight: 700; }
 
@@ -82,12 +83,14 @@
   font-weight: 800;
   letter-spacing: 0.06em;
   color: var(--pink);
+  transform: translateY(1px);
 }
 .about-req dd {
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-dim);
+  transform: translateY(5px);
 }
 
 .about-modes {

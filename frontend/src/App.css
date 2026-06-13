@@ -34,21 +34,19 @@ html, body {
   overflow-x: hidden;
 }
 
-/* ── App layout ── */
 .app {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
   padding: 16px 20px 24px;
   gap: 16px;
-  width: 100%;            /* fill the container so the header doesn't shift between tabs */
+  width: 100%;           
   max-width: 1200px;
   margin: 0 auto;
-  text-align: left;       /* undo the leftover #root text-align: center */
+  text-align: left;      
   box-sizing: border-box;
 }
 
-/* ── Header ── */
 .app-header {
   display: flex;
   align-items: center;
@@ -71,11 +69,10 @@ html, body {
   height: 20px;
   width: auto;
   display: block;
-  transform: translateY(6px);   /* sit the p on the text baseline with its stem as a descender */
+  transform: translateY(6px); 
 }
 
 .logo-word {
-  /* the logo is the lowercase p, so the word reads "plonktris" */
   font-family: 'Charter', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
   font-size: 24px;
   font-weight: 600;
@@ -92,7 +89,6 @@ html, body {
   margin-left: 4px;
 }
 
-/* ── View tabs (browse / create) ── */
 .view-tabs {
   display: flex;
   align-items: center;
@@ -100,7 +96,6 @@ html, body {
   margin-left: 16px;
 }
 
-/* ── Stage tabs ── */
 .stage-tabs {
   margin-left: auto;
   display: flex;
@@ -110,13 +105,12 @@ html, body {
 
 .play-board-title {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  text-align: center;
+  align-items: baseline;
+  gap: 8px;
+  margin-left: 16px;
 }
 .play-board-name {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--pink);
   letter-spacing: 0.04em;
@@ -127,7 +121,6 @@ html, body {
   letter-spacing: 0.04em;
 }
 
-/* ── User box / login ── */
 .login-btn {
   margin-left: 8px;
   background: none;
@@ -203,7 +196,6 @@ html, body {
 .user-dropdown-item:hover { background: var(--bg-raised); color: var(--lavender); }
 .user-dropdown-item:last-child:hover { color: #d6336c; }
 
-/* ── Browse layout ── */
 .browse-main {
   display: block;
 }
@@ -259,10 +251,10 @@ html, body {
   color: var(--lavender);
 }
 
-/* ── Main layout ── */
 .app-main {
   display: flex;
   align-items: flex-start;
+  justify-content: center;
   gap: 20px;
   flex: 1;
 }
@@ -273,8 +265,8 @@ html, body {
   top: 16px;
 }
 
-.sidebar-left  { width: 160px; }
-.sidebar-right { width: 175px; }
+.sidebar-left  { width: 0px; }
+.sidebar-right { width: 105px; }
 
 .board-section {
   flex: 0 0 auto;
@@ -284,7 +276,6 @@ html, body {
   gap: 10px;
 }
 
-/* ── Shared panel label ── */
 .panel-label {
   font-size: 9px;
   font-weight: 700;
@@ -296,9 +287,8 @@ html, body {
   margin-bottom: 6px;
 }
 
-/* ── Start solving button ── */
 .start-solving-btn {
-  width: 100%;   /* fills the 87px side panel */
+  width: 100%;   
   background: transparent;
   border: 1px solid var(--pink);
   color: var(--pink);
@@ -320,9 +310,9 @@ html, body {
   cursor: default;
 }
 
-/* ── Action button / proof block: continues the queue column ── */
+/* proof plock */
 .right-proof {
-  margin-top: 8px;  /* same gap as inside the queue column */
+  margin-top: 8px; 
   width: 80px;
 }
 
@@ -334,7 +324,6 @@ html, body {
   letter-spacing: 0.03em;
 }
 
-/* ── Scrollbar ── */
 ::-webkit-scrollbar        { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track  { background: var(--bg-panel); }
 ::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 3px; }

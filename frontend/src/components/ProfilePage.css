@@ -46,18 +46,20 @@
   font-style: italic;
 }
 
-/* settings */
+
+/* settings — checkbox lines up with the title row, description flows under it */
 .profile-setting {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 3px;
   padding: 10px 12px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   cursor: pointer;
 }
 .profile-setting input {
-  margin-top: 2px;
   width: 14px;
   height: 14px;
   flex-shrink: 0;
@@ -65,9 +67,10 @@
   cursor: pointer;
 }
 .profile-setting-text {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  display: contents;
+}
+.profile-setting-desc {
+  grid-column: 2;
 }
 .profile-setting-name {
   font-size: 12px;
@@ -79,6 +82,41 @@
   font-size: 10px;
   color: var(--text-muted);
   line-height: 1.5;
+}
+
+/* embedded keybindings/handling editor */
+.profile-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+}
+/* fill the width: 3 settings per row */
+.profile-keys .keys-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 32px;
+}
+/* keep each label glued to its control instead of pushed to opposite edges */
+.profile-keys .keys-row {
+  justify-content: flex-start;
+  gap: 12px;
+}
+.profile-keys .keys-action {
+  width: 120px;
+  flex-shrink: 0;
+}
+.profile-keys .keys-bind,
+.profile-keys .handling-input {
+  flex: 1;
+  min-width: 0;
+}
+.profile-keys .keys-reset {
+  align-self: flex-start;
+  margin-top: 2px;
 }
 
 /* pending submissions */

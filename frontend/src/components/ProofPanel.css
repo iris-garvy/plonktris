@@ -31,30 +31,6 @@
   letter-spacing: 0.04em;
   color: #c2820a;
 }
-.rate-limit-sub {
-  font-size: 8px;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
-.secure-toggle {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 8px;
-  color: var(--text-muted);
-  letter-spacing: 0.03em;
-  cursor: pointer;
-  line-height: 1.2;
-}
-.secure-toggle input {
-  width: 11px;
-  height: 11px;
-  flex-shrink: 0;
-  accent-color: var(--lavender);
-  cursor: pointer;
-}
-
 .prove-btn {
   width: 87px;   /* lines up with the queue column */
   padding: 6px 0;
@@ -71,6 +47,10 @@
 .prove-btn:hover:not(:disabled) { background: rgba(255, 189, 222, 0.1); }
 .prove-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .prove-btn.proving  { animation: pulse-border 1.2s ease-in-out infinite; }
+
+/* secure (in-browser) proving button — lavender to set it apart from fast pink */
+.prove-btn.secure { border-color: var(--lavender); color: var(--lavender); }
+.prove-btn.secure:hover:not(:disabled) { background: rgba(181, 165, 255, 0.1); }
 
 .proving-inner { display: flex; align-items: center; justify-content: center; gap: 8px; }
 

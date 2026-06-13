@@ -3,10 +3,10 @@ import './AboutPage.css';
 const REQS: [string, string][] = [
   ['TSS / TSD / TST', 'a T-spin that clears 1 / 2 / 3 lines'],
   ['TETRIS', 'clear 4 lines at once'],
-  ['PC', 'perfect clear — empty the whole board'],
-  ['ATTACK', 'total attack (garbage) sent, from clears, B2B, combos and spins'],
-  ['COMBO', 'highest combo reached (consecutive line-clearing placements)'],
-  ['NO HOLD', 'solve without ever using hold'],
+  ['PC', 'perfect clear'],
+  ['ATTACK', 'total garbage sent, plonktris uses Puyo Puyo Tetris guidelines'],
+  ['COMBO', 'highest combo reached'],
+  ['NO HOLD', 'solve with hold disabled'],
 ];
 
 interface AboutPageProps {
@@ -18,12 +18,9 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
   return (
     <div className="about-page">
       <section className="about-hero">
-        <h1 className="about-title">what is plonktris?</h1>
+        <h1 className="about-title">what's plonktris?</h1>
         <p className="about-lead">
-          Plonktris is a place to set and solve Tetris puzzles — and{' '}
-          <em>prove</em> you solved them with a zero-knowledge proof. The proof
-          convinces the server your solution is valid without ever revealing the
-          moves you made.
+          Plonktris is a tetris puzzle website.
         </p>
       </section>
 

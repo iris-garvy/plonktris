@@ -121,6 +121,14 @@ function App() {
   const [showReqModal, setShowReqModal] = useState(false);
   const [reqsConfirmed, setReqsConfirmed] = useState(false);
 
+  // leaving create while solving resets it back to edit mode
+  useEffect(() => {
+    if (view !== 'create') {
+      setStage('edit');
+      setReqsConfirmed(false);
+    }
+  }, [view]);
+
   const [keys, setKeys] = useState<Bindings>(loadBindings);
   const [handling, setHandling] = useState<Handling>(loadHandling);
   const [showKeysModal, setShowKeysModal] = useState(false);
@@ -306,6 +314,20 @@ function App() {
           </button>
         </nav>
 
+        {view === 'play' && playPuzzle && (
+          <div className="play-board-title">
+            <span className="play-board-name">{playPuzzle.name}</span>
+            <span className="play-board-creator">
+              by{' '}
+              {playPuzzle.creator ? (
+                <button className="creator-link" onClick={() => gotoProfile(playPuzzle.creator!)}>
+                  {playPuzzle.creator}
+                </button>
+              ) : 'anonymous'}
+            </span>
+          </div>
+        )}
+
         <div className="stage-tabs">
           {view === 'create' && (
             stage === 'edit' ? (
@@ -322,9 +344,11 @@ function App() {
               </button>
             )
           )}
-          <button className="keys-open-btn" onClick={() => setShowKeysModal(true)} title="Keybindings">
-            ⌨
-          </button>
+          {(view === 'play' || view === 'create') && (
+            <button className="keys-open-btn" onClick={() => setShowKeysModal(true)} title="Keybindings">
+              ⌨
+            </button>
+          )}
 
           {user ? (
             <div className="user-menu" ref={userMenuRef}>
@@ -382,6 +406,10 @@ function App() {
             isOwner={!!user && user.username.toLowerCase() === profileUser.toLowerCase()}
             secureProving={secureProving}
             onSecureProvingChange={handleSecureProvingChange}
+            bindings={keys}
+            onBindingsChange={handleKeysChange}
+            handling={handling}
+            onHandlingChange={handleHandlingChange}
           />
         </main>
       ) : (
@@ -391,19 +419,6 @@ function App() {
 
           {/* CENTER: board (action block renders under the hold box) */}
           <section className="board-section">
-            {view === 'play' && playPuzzle && (
-              <div className="play-board-title">
-                <span className="play-board-name">{playPuzzle.name}</span>
-                <span className="play-board-creator">
-                  by{' '}
-                  {playPuzzle.creator ? (
-                    <button className="creator-link" onClick={() => gotoProfile(playPuzzle.creator!)}>
-                      {playPuzzle.creator}
-                    </button>
-                  ) : 'anonymous'}
-                </span>
-              </div>
-            )}
             {view === 'create' && stage === 'edit' ? (
               <TetrisBoard
                 board={board}

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { api, type Puzzle, type UserProfile } from '../api';
 import PuzzleCard from './PuzzleCard';
+import KeybindingsEditor from './KeybindingsEditor';
+import { type Bindings, type Handling } from '../keybindings';
 import './ProfilePage.css';
 
 interface ProfilePageProps {
@@ -10,6 +12,10 @@ interface ProfilePageProps {
   isOwner: boolean;
   secureProving: boolean;
   onSecureProvingChange: (v: boolean) => void;
+  bindings: Bindings;
+  onBindingsChange: (next: Bindings) => void;
+  handling: Handling;
+  onHandlingChange: (next: Handling) => void;
 }
 
 function formatJoined(iso: string): string {
@@ -20,6 +26,7 @@ function formatJoined(iso: string): string {
 
 export default function ProfilePage({
   username, onPlay, onCreator, isOwner, secureProving, onSecureProvingChange,
+  bindings, onBindingsChange, handling, onHandlingChange,
 }: ProfilePageProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,26 +69,6 @@ export default function ProfilePage({
           {profile.created.length} created · {profile.solved.length} solved
         </div>
       </div>
-
-      {isOwner && (
-        <section className="profile-section">
-          <div className="profile-section-label">SETTINGS</div>
-          <label className="profile-setting">
-            <input
-              type="checkbox"
-              checked={secureProving}
-              onChange={e => onSecureProvingChange(e.target.checked)}
-            />
-            <span className="profile-setting-text">
-              <span className="profile-setting-name">secure proving</span>
-              <span className="profile-setting-desc">
-                prove puzzles locally in your browser — slower, but your solution never
-                leaves your device. adds a “secure (slow)” option when you submit.
-              </span>
-            </span>
-          </label>
-        </section>
-      )}
 
       {profile.pending.length > 0 && (
         <section className="profile-section">
@@ -128,6 +115,34 @@ export default function ProfilePage({
           </div>
         )}
       </section>
+
+      {isOwner && (
+        <section className="profile-section">
+          <div className="profile-section-label">SETTINGS</div>
+          <label className="profile-setting">
+            <input
+              type="checkbox"
+              checked={secureProving}
+              onChange={e => onSecureProvingChange(e.target.checked)}
+            />
+            <span className="profile-setting-text">
+              <span className="profile-setting-name">secure proving</span>
+              <span className="profile-setting-desc">
+                adds a secure option for proof submission that generates entirely within browser. WARNING: this is much slower.
+              </span>
+            </span>
+          </label>
+
+          <div className="profile-keys">
+            <KeybindingsEditor
+              bindings={bindings}
+              onChange={onBindingsChange}
+              handling={handling}
+              onHandlingChange={onHandlingChange}
+            />
+          </div>
+        </section>
+      )}
     </div>
   );
 }

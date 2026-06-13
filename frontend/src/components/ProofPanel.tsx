@@ -8,66 +8,53 @@ interface ProofPanelProps {
   proof: unknown;
   onProve: (secure: boolean) => void;
   disabled: boolean;
-  /** whether the per-prove "secure proving" option is available */
+  /** user enabled the secure-proving option → show the secure button */
   allowSecure: boolean;
-  /** server fast-proving limit hit — only in-browser proving is left */
+  /** server fast-proving limit hit → fast button locked, secure forced */
   rateLimited: boolean;
 }
 
 export default function ProofPanel({ isProving, error, proof, onProve, disabled, allowSecure, rateLimited }: ProofPanelProps) {
-  const [secure, setSecure] = useState(false);
+  // which button is currently proving, so the spinner lands on the right one
+  const [pressedSecure, setPressedSecure] = useState(false);
   const submitted = !!proof && !error;
-  const useSecure = allowSecure && secure;
 
   const localOnly = submitted && (proof as { localOnly?: boolean }).localOnly === true;
   const provedSecurely = submitted && (proof as { secure?: boolean }).secure === true;
 
+  // secure button shows when the user opted in, or when fast proving is locked
+  const showSecure = allowSecure || rateLimited;
+
+  const press = (secure: boolean) => { setPressedSecure(secure); onProve(secure); };
+
   return (
     <div className="proof-panel">
-      {rateLimited && !submitted ? (
+      {!submitted && (
         <>
-          <div className="rate-limit-note">⚡ fast proving limit reached</div>
-          <button
-            className={`prove-btn ${isProving ? 'proving' : ''}`}
-            onClick={() => onProve(true)}
-            disabled={isProving || disabled}
-          >
-            {isProving ? (
-              <span className="proving-inner"><span className="spinner" />proving…</span>
-            ) : '🔒 prove securely'}
-          </button>
-          <div className="rate-limit-sub">proves in your browser — slower, keep this tab open</div>
-        </>
-      ) : (
-        <>
-          {allowSecure && !submitted && (
-            <label className="secure-toggle">
-              <input
-                type="checkbox"
-                checked={secure}
-                onChange={e => setSecure(e.target.checked)}
-                disabled={isProving}
-              />
-              🔒 secure (slow)
-            </label>
-          )}
+          {rateLimited && <div className="rate-limit-note">⚡ fast proving limit reached</div>}
 
           <button
-            className={`prove-btn ${isProving ? 'proving' : ''}`}
-            onClick={() => onProve(useSecure)}
-            disabled={isProving || disabled || submitted}
+            className={`prove-btn ${isProving && !pressedSecure ? 'proving' : ''}`}
+            onClick={() => press(false)}
+            disabled={isProving || disabled || rateLimited}
+            title={rateLimited ? 'fast proving limit reached — use secure proving' : undefined}
           >
-            {isProving ? (
-              <span className="proving-inner">
-                <span className="spinner" />
-                {useSecure ? 'proving…' : 'submitting…'}
-              </span>
-            ) : submitted ? (
-              localOnly ? '✓ solved' : '✓ submitted'
-            ) : (
-              useSecure ? '🔒 secure submit' : '⬡ submit'
-            )}
+            {isProving && !pressedSecure ? (
+              <span className="proving-inner"><span className="spinner" />submitting…</span>
+            ) : '⬡ submit'}
           </button>
+
+          {showSecure && (
+            <button
+              className={`prove-btn secure ${isProving && pressedSecure ? 'proving' : ''}`}
+              onClick={() => press(true)}
+              disabled={isProving || disabled}
+            >
+              {isProving && pressedSecure ? (
+                <span className="proving-inner"><span className="spinner" />proving…</span>
+              ) : '🔒 secure'}
+            </button>
+          )}
         </>
       )}
 
