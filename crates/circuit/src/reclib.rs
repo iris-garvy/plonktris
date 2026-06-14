@@ -340,6 +340,13 @@ struct GameState {
     next_piece: Target,
 }
 
+struct StepState{
+    board: [Target; 21],
+    queue_index: Target,
+    held_piece: Target,
+    
+}
+
 impl GameState {
     fn new(
         builder: &mut CircuitBuilder<GoldilocksField, 2>, 
