@@ -42,17 +42,13 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
         <h2>solving a puzzle</h2>
         <ol className="about-steps">
           <li>Open a puzzle from the home page or search.</li>
-          <li>Place the queued pieces to satisfy the puzzle's requirements.</li>
+          <li>Solve the puzzle by fulfilling the requirements!</li>
           <li>
-            When the requirements are met, hit <strong>submit</strong> — a proof
-            is generated and checked. If you're logged in, the solve is recorded
-            on your profile (and you might grab the <em>first solve</em>).
+            When the requirements are met, hit <strong>submit</strong>. Prooftris will generate a proof
+            that you know a solution. If you're logged in, the solve is recorded
+            on your profile (and you might just be the first to do it)!
           </li>
         </ol>
-        <p className="about-note">
-          Anonymous solving works too, but it isn't recorded — log in if you want
-          credit.
-        </p>
       </section>
 
       <section className="about-section">

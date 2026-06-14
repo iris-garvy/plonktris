@@ -9,7 +9,7 @@ import type { SVGProps } from 'react';
 
 export function CircleIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 340.5 340.5" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <svg viewBox="0 10 350 340.5" xmlns="http://www.w3.org/2000/svg" {...props}>
       <path d="M170,61.75c-60.06,0-108.75,48.69-108.75,108.75s48.69,108.75,108.75,108.75,108.75-48.69,108.75-108.75-48.69-108.75-108.75-108.75ZM170.25.25c93.89,0,170,76.11,170,170s-76.11,170-170,170S.25,264.14.25,170.25,76.36.25,170.25.25Z" />
     </svg>
   );
