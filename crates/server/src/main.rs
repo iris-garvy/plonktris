@@ -16,6 +16,10 @@ use axum::http::{HeaderMap, HeaderValue, header::AUTHORIZATION};
 use axum::{async_trait, extract::FromRequestParts, http::request::Parts};
 
 
+/// Max puzzle length the server will prove itself. Bound by VM memory (~10 at
+/// 4GB). Longer puzzles are routed to in-browser proving. Bump with the VM RAM.
+const MAX_SERVER_PIECES: usize = 10;
+
 struct AppState {
     db: PgPool,
     verifiers: Arc<Vec<VerifierData>>,
@@ -118,6 +122,14 @@ async fn request_proof(
     let mut req_counter = 0;
     if num_pieces < 1 || num_pieces > 21 {
         return Err((StatusCode::BAD_REQUEST, "num_pieces must be between 1 and 21".into()));
+    }
+    // Server-side proving is memory-bound: longer puzzles OOM the machine. Cap
+    // it to what the current VM can prove; longer puzzles must use secure
+    // (in-browser) proving. Raise MAX_SERVER_PIECES when the VM gets more RAM.
+    if num_pieces > MAX_SERVER_PIECES {
+        return Err((StatusCode::BAD_REQUEST, format!(
+            "puzzles longer than {MAX_SERVER_PIECES} pieces must use secure (in-browser) proving"
+        )));
     }
     for req in 0..7 {
         req_counter += body.requirements[req];
