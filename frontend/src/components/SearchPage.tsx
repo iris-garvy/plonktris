@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { api, type Puzzle, type PuzzleFilters, type ReqFilter } from '../api';
 import PuzzleCard from './PuzzleCard';
 import './BrowsePage.css';
@@ -91,7 +92,7 @@ export default function SearchPage({ onPlay, onCreator }: SearchPageProps) {
             className="reqs-toggle"
             onClick={() => setReqsOpen(o => !o)}
           >
-            {reqs.length === 0 ? 'any' : `${reqs.length} selected`} ▾
+            {reqs.length === 0 ? 'any' : `${reqs.length} selected`}<ChevronDown className="glyph-icon glyph-trail" />
           </button>
           {reqsOpen && (
             <>

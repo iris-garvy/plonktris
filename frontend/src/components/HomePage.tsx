@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Star } from 'lucide-react';
 import { api, type Puzzle, type SiteStats, type LeaderEntry } from '../api';
 import PuzzleCard from './PuzzleCard';
 import './BrowsePage.css';
@@ -144,7 +145,7 @@ export default function HomePage({ onPlay, onCreator }: HomePageProps) {
                     {entry.solves}
                     {entry.first_solves > 0 && (
                       <span className="leader-firsts" title={`${entry.first_solves} first solves`}>
-                        ★{entry.first_solves}
+                        <Star className="glyph-icon" fill="currentColor" />{entry.first_solves}
                       </span>
                     )}
                   </span>

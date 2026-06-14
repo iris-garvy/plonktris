@@ -341,6 +341,8 @@ struct GameState {
 }
 
 impl GameState {
+    //fn register()
+
     fn new(
         builder: &mut CircuitBuilder<GoldilocksField, 2>, 
         board: BoardTargets, 

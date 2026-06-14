@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type ReactNode, type CSSProperties } from 'react';
+import { Eraser } from 'lucide-react';
 import {
   BOARD_COLS, BOARD_ROWS, EMPTY, PIECE_TYPES,
   getPieceCells, hardDrop, isValidPlacement, rotate, spawnCol,
@@ -264,7 +265,7 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
               className={`palette-swatch eraser ${selectedPaint === EMPTY ? 'active' : ''}`}
               onClick={() => setSelectedPaint(EMPTY)}
               title="Eraser"
-            >✕</button>
+            ><Eraser className="glyph-icon" /></button>
           </div>
         </div>
 

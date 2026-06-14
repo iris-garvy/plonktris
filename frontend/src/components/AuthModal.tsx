@@ -1,4 +1,5 @@
 import { useState, type SubmitEvent } from 'react';
+import { LogIn, UserPlus } from 'lucide-react';
 import { api, setToken, type User } from '../api';
 import './AuthModal.css';
 
@@ -95,7 +96,9 @@ export default function AuthModal({ onAuthed, onClose }: AuthModalProps) {
             type="submit"
             disabled={busy || !username || !password}
           >
-            {busy ? '…' : mode === 'login' ? '▶ log in' : '▶ create account'}
+            {busy ? '…' : mode === 'login'
+              ? <><LogIn className="glyph-icon glyph-lead" />log in</>
+              : <><UserPlus className="glyph-icon glyph-lead" />create account</>}
           </button>
         </form>
       </div>

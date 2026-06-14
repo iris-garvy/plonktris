@@ -1,9 +1,27 @@
 import { useState, useEffect } from 'react';
+import { ArrowLeft, ArrowRight, ArrowUp, ArrowDown, type LucideIcon } from 'lucide-react';
 import {
   BINDING_LABELS, DEFAULT_BINDINGS, DEFAULT_HANDLING, keyLabel, keySig,
   type BindingAction, type Bindings, type Handling,
 } from '../keybindings';
 import './KeybindingsModal.css';
+
+const ARROW_ICONS: Record<string, LucideIcon> = {
+  ArrowLeft, ArrowRight, ArrowUp, ArrowDown,
+};
+
+/** Renders a key binding: arrow keys as icons, everything else as text. */
+function KeyCap({ binding }: { binding: string }) {
+  const mod = binding.startsWith('mod+');
+  const key = mod ? binding.slice(4) : binding;
+  const Icon = ARROW_ICONS[key];
+  return (
+    <>
+      {mod && <span className="key-mod">⌘/^</span>}
+      {Icon ? <Icon className="key-icon" aria-label={key} /> : keyLabel(key)}
+    </>
+  );
+}
 
 function clamp(value: string | number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Number(value) || 0));
@@ -56,7 +74,7 @@ export default function KeybindingsEditor({ bindings, onChange, handling, onHand
               className={`keys-bind ${listening === action ? 'listening' : ''}`}
               onClick={() => setListening(listening === action ? null : action)}
             >
-              {listening === action ? 'press a key…' : keyLabel(bindings[action])}
+              {listening === action ? 'press a key…' : <KeyCap binding={bindings[action]} />}
             </button>
           </div>
         ))}

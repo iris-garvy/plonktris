@@ -12,6 +12,7 @@ import ProfilePage from './components/ProfilePage';
 import AboutPage from './components/AboutPage';
 import AuthModal from './components/AuthModal';
 import KeybindingsModal from './components/KeybindingsModal';
+import { ArrowLeft, ChevronDown } from 'lucide-react';
 import { GearIcon, GlassIcon } from './components/icons';
 import { boardToUint8, movesToUint8, clearLines, BOARD_COLS, BOARD_ROWS, type Board, type CellPos, type SecretMoves } from './tetrisUtils';
 import { emptyLedger, requirementsMet, type Ledger, type Requirements } from './tetrisLedger';
@@ -41,7 +42,7 @@ function requirementsProgress(requirements: Requirements, ledger: Ledger): strin
     .slice(0, 7)
     .map((v, i) => (v > 0 ? `${REQ_NAMES[i]} ${counts[i]}/${v}` : null))
     .filter(Boolean);
-  if (requirements[7]) parts.push(ledger.heldUsed ? 'NO HOLD ✗' : 'NO HOLD ✓');
+  if (requirements[7]) parts.push('NO HOLD');
   return parts.length ? parts.join(' · ') : 'no requirements';
 }
 
@@ -341,7 +342,7 @@ function App() {
               </button>
             ) : (
               <button className="stage-tab" onClick={handleBackToEdit}>
-                ← EDIT
+                <ArrowLeft className="glyph-icon glyph-lead" />EDIT
               </button>
             )
           )}
@@ -359,7 +360,7 @@ function App() {
                 title="Account"
               >
                 {user.username}
-                <span className="user-caret">▾</span>
+                <span className="user-caret"><ChevronDown className="glyph-icon" /></span>
               </button>
               {showUserMenu && (
                 <div className="user-dropdown">

@@ -42,6 +42,14 @@
 
 .keys-bind:hover { border-color: var(--pink); }
 
+.key-icon {
+  width: 1.5em;
+  height: 1.5em;
+  vertical-align: middle;
+  stroke-width: 2.5;
+}
+.key-mod { margin-right: 4px; }
+
 .keys-bind.listening {
   border-color: var(--lavender);
   color: var(--lavender);

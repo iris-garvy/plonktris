@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Zap } from 'lucide-react';
 import { CircleIcon, LockIcon } from './icons';
 import './ProofPanel.css';
 
@@ -32,7 +33,7 @@ export default function ProofPanel({ isProving, error, proof, onProve, disabled,
     <div className="proof-panel">
       {!submitted && (
         <>
-          {rateLimited && <div className="rate-limit-note">⚡ fast proving limit reached</div>}
+          {rateLimited && <div className="rate-limit-note"><Zap className="glyph-icon glyph-lead" />fast proving limit reached</div>}
 
           <button
             className={`prove-btn ${isProving && !pressedSecure ? 'proving' : ''}`}

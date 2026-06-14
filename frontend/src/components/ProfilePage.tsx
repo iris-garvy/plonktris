@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
 import { api, type Puzzle, type UserProfile } from '../api';
 import PuzzleCard from './PuzzleCard';
 import KeybindingsEditor from './KeybindingsEditor';
@@ -79,7 +80,7 @@ export default function ProfilePage({
                 <span className="pending-name">{job.name}</span>
                 {job.status === 'failed' ? (
                   <span className="pending-status failed" title={job.failed_reason ?? ''}>
-                    ✗ failed{job.failed_reason ? `: ${job.failed_reason}` : ''}
+                    <X className="glyph-icon glyph-lead" />failed{job.failed_reason ? `: ${job.failed_reason}` : ''}
                   </span>
                 ) : (
                   <span className="pending-status">submitted — verifying…</span>
