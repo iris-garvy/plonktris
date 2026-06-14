@@ -22,5 +22,5 @@ primary_region = 'iad'
 [[vm]]
   # proof generation peaks ~2GB; 4GB gives headroom. extra cpus speed up the
   # parallel (rayon) prover.
-  size = 'shared-cpu-2x'
+  size = 'shared-cpu-8x'
   memory = '4gb'
