@@ -1,3 +1,4 @@
+import { CircleIcon, LockIcon, GearIcon } from './icons';
 import './AboutPage.css';
 
 const REQS: [string, string][] = [
@@ -20,9 +21,21 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
       <section className="about-hero">
         <h1 className="about-title">what's plonktris?</h1>
         <p className="about-lead">
-          A tetris puzzle website where users can submit puzzles with complete privacy. Plonktris validates that puzzles are 
-          solvable but does not store solutions, so the only person who knows how to solve a puzzle is its creator.
+          Plonktris is a tetris puzzle website where users can submit puzzles with complete privacy. Plonktris validates that puzzles are 
+          solvable but does not store solutions, so the creator maintains total control over the solution.
         </p>
+      </section>
+
+      <section className="about-section">
+        <h2>creating a puzzle</h2>
+        <ol className="about-steps">
+          <li>In <strong>create</strong>, draw a starting board and set the piece queue.</li>
+          <li>Choose the requirements a solver must hit.</li>
+          <li>
+            Solve it yourself to prove it's possible — that solution is what gets
+            published. You'll need an account to publish.
+          </li>
+        </ol>
       </section>
 
       <section className="about-section">
@@ -43,18 +56,6 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
       </section>
 
       <section className="about-section">
-        <h2>creating a puzzle</h2>
-        <ol className="about-steps">
-          <li>In <strong>create</strong>, draw a starting board and set the piece queue.</li>
-          <li>Choose the requirements a solver must hit.</li>
-          <li>
-            Solve it yourself to prove it's possible — that solution is what gets
-            published. You'll need an account to publish.
-          </li>
-        </ol>
-      </section>
-
-      <section className="about-section">
         <h2>requirements</h2>
         <dl className="about-reqs">
           {REQS.map(([name, desc]) => (
@@ -70,14 +71,14 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
         <h2>fast vs. secure proving</h2>
         <div className="about-modes">
           <div className="about-mode">
-            <div className="about-mode-name">⬡ fast (default)</div>
+            <div className="about-mode-name"><CircleIcon className="btn-icon" />fast (default)</div>
             <p>
               The server generates the proof. Quick, and you can close the tab —
               the result shows up on your profile when it's done.
             </p>
           </div>
           <div className="about-mode">
-            <div className="about-mode-name">🔒 secure (slow)</div>
+            <div className="about-mode-name"><LockIcon className="btn-icon" />secure (slow)</div>
             <p>
               Your browser generates the proof, so your solution never leaves your
               device — truly zero-knowledge. It's slower and you must keep the tab
@@ -91,7 +92,7 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
         <h2>controls</h2>
         <p>
           Move, rotate, hard/soft drop and hold with the keyboard. You can view
-          and rebind everything from the <strong>⌨</strong> button in the header.
+          and rebind everything from the <GearIcon className="btn-icon" /> button in the header.
         </p>
       </section>
 

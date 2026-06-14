@@ -12,6 +12,7 @@ import ProfilePage from './components/ProfilePage';
 import AboutPage from './components/AboutPage';
 import AuthModal from './components/AuthModal';
 import KeybindingsModal from './components/KeybindingsModal';
+import { GearIcon, GlassIcon } from './components/icons';
 import { boardToUint8, movesToUint8, clearLines, BOARD_COLS, BOARD_ROWS, type Board, type CellPos, type SecretMoves } from './tetrisUtils';
 import { emptyLedger, requirementsMet, type Ledger, type Requirements } from './tetrisLedger';
 import { loadBindings, saveBindings, loadHandling, saveHandling, type Bindings, type Handling } from './keybindings';
@@ -336,7 +337,7 @@ function App() {
                 onClick={handleStartSolving}
                 disabled={queue.length === 0}
               >
-                ▶ SOLVE
+                <GlassIcon className="btn-icon" />SOLVE
               </button>
             ) : (
               <button className="stage-tab" onClick={handleBackToEdit}>
@@ -346,7 +347,7 @@ function App() {
           )}
           {(view === 'play' || view === 'create') && (
             <button className="keys-open-btn" onClick={() => setShowKeysModal(true)} title="Keybindings">
-              ⌨
+              <GearIcon className="btn-icon" />
             </button>
           )}
 
@@ -435,7 +436,7 @@ function App() {
                     onClick={handleStartSolving}
                     disabled={queue.length === 0}
                   >
-                    ▶ solve
+                    <GlassIcon className="btn-icon" />solve
                   </button>
                 }
               />

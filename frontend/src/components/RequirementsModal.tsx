@@ -1,4 +1,5 @@
 import RequirementsEditor from './RequirementsEditor';
+import { GlassIcon } from './icons';
 import type { Requirements } from '../tetrisLedger';
 import './RequirementsModal.css';
 
@@ -30,7 +31,7 @@ export default function RequirementsModal({ requirements, onChange, name, onName
         />
         <div className="modal-actions">
           <button className="modal-btn cancel" onClick={onCancel}>cancel</button>
-          <button className="modal-btn submit" onClick={onSubmit}>▶ solve</button>
+          <button className="modal-btn submit" onClick={onSubmit}><GlassIcon className="btn-icon" />solve</button>
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CircleIcon, LockIcon } from './icons';
 import './ProofPanel.css';
 
 interface ProofPanelProps {
@@ -41,7 +42,7 @@ export default function ProofPanel({ isProving, error, proof, onProve, disabled,
           >
             {isProving && !pressedSecure ? (
               <span className="proving-inner"><span className="spinner" />submitting…</span>
-            ) : '⬡ submit'}
+            ) : <><CircleIcon className="btn-icon" />submit</>}
           </button>
 
           {showSecure && (
@@ -52,7 +53,7 @@ export default function ProofPanel({ isProving, error, proof, onProve, disabled,
             >
               {isProving && pressedSecure ? (
                 <span className="proving-inner"><span className="spinner" />proving…</span>
-              ) : '🔒 secure'}
+              ) : <><LockIcon className="btn-icon" />secure</>}
             </button>
           )}
         </>
