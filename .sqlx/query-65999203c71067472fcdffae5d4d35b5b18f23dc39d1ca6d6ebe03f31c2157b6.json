@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE jobs SET status = 'pending' WHERE status = 'proving'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "65999203c71067472fcdffae5d4d35b5b18f23dc39d1ca6d6ebe03f31c2157b6"
+}

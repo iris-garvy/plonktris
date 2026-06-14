@@ -32,6 +32,16 @@ async fn main() {
     let db = PgPool::connect(&database_url)
     .await.unwrap();
 
+    // Reclaim jobs orphaned by a previous crash/restart: a job marked 'proving'
+    // when the process died is never re-selected (the worker only picks 'pending'),
+    // so it would hang forever. On a fresh start nothing is actually proving.
+    // NOTE: assumes a single worker process — see fly.toml (run one machine).
+    let reclaimed = sqlx::query!("UPDATE jobs SET status = 'pending' WHERE status = 'proving'")
+        .execute(&db).await
+        .map(|r| r.rows_affected())
+        .unwrap_or(0);
+    if reclaimed > 0 { println!("reclaimed {reclaimed} orphaned proving job(s)"); }
+
     println!("loading verifiers...");
     let verifiers = Arc::new(load_verifiers());
     println!("ready!");
