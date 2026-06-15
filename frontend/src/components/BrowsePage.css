@@ -105,8 +105,6 @@
 .puzzle-creator {
   font-size: 10px;
   color: var(--text-muted);
-  margin-top: -16px;   /* tuck the author up under the puzzle name */
-  margin-bottom: 16px;
 }
 
 .puzzle-queue {
