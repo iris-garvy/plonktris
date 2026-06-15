@@ -237,7 +237,7 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
 
   return (
     <div className="tetris-board-container">
-      {/* hold | (toolbar + grid) */}
+      {/* hold side */}
       <div className="board-layout">
         <div className="board-side-panel left">
           <div className="hold-box">
@@ -247,7 +247,7 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
         </div>
 
         <div className="board-column">
-        {/* Toolbar: paint palette, same width as the grid */}
+        {/* paint thing on top */}
         <div className="board-toolbar">
           <div className="paint-palette">
             {[8, 1, 2, 3, 4, 5, 6, 7].map(id => (
@@ -268,7 +268,7 @@ export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoar
         </div>
 
         <div className="tetris-grid">
-          {/* row 0 is the hidden spawn row; only rows 1-20 are shown */}
+          {/* 21 rows, 1 hidden starts at the top. 0 indexed */}
           {board.map((row, rowIdx) =>
             rowIdx === 0 ? null :
             row.map((cell, colIdx) => {

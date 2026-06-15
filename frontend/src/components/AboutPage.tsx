@@ -21,7 +21,7 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
       <section className="about-hero">
         <h1 className="about-title">WHAT'S PLONKTRIS?</h1>
         <p className="about-lead">
-          plonktris is a tetris puzzle website where users can submit puzzles with complete privacy. Plonktris validates that puzzles are 
+          plonktris is a tetris puzzle website where users can submit puzzles with complete privacy. plonktris validates that puzzles are 
           solvable but does not store solutions, so the creator maintains total control over the solution.
         </p>
       </section>
@@ -32,7 +32,7 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
           <li>In <strong>create</strong>, draw a starting board and set the piece queue.</li>
           <li>Hit the <strong>prove</strong> button and set the requirements for the puzzle.</li>
           <li>Prove your puzzle is solvable by solving it yourself.</li>
-          <li>Press the <strong>submit</strong> button. Plonktris will then verify your puzzle with a zero knowledge proof and publish it!</li>
+          <li>Press the <strong>submit</strong> button. plonktris will then verify your puzzle with a zero knowledge proof and publish it!</li>
         </ol>
       </section>
 
@@ -42,7 +42,7 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
           <li>Open a puzzle from the home page or search.</li>
           <li>Solve the puzzle by fulfilling the requirements</li>
           <li>
-            When the requirements are met, hit <strong>submit</strong>. Prooftris will generate a proof
+            When the requirements are met, hit <strong>submit</strong>. plonktris will generate a proof
             that you know a solution. If you're logged in, the solve is recorded
             on your profile.
           </li>

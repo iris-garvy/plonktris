@@ -199,5 +199,5 @@
   border: 1px solid var(--border);
   flex-shrink: 0;
 }
-.mini-cell        { border-radius: 1px; }
+.mini-cell        { border-radius: 0; }
 .mini-cell.off    { background: transparent; }

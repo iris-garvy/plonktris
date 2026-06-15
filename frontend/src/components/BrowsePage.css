@@ -75,7 +75,7 @@
   flex: 0 0 auto;
   max-width: 180px;
 }
-.puzzle-card.compact .puzzle-creator { flex: 0 0 auto; white-space: nowrap; }
+.puzzle-card.compact .puzzle-creator { flex: 0 0 auto; white-space: nowrap; margin-top: 0; }
 .puzzle-card.compact .puzzle-queue { flex-wrap: nowrap; }
 .puzzle-card.compact .puzzle-reqs { flex-wrap: nowrap; overflow: hidden; }
 .puzzle-card.compact .puzzle-footer {
@@ -87,7 +87,7 @@
 .puzzle-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   min-width: 0;
   flex: 1;
 }
@@ -105,6 +105,8 @@
 .puzzle-creator {
   font-size: 10px;
   color: var(--text-muted);
+  margin-top: -16px;   /* tuck the author up under the puzzle name */
+  margin-bottom: 16px;
 }
 
 .puzzle-queue {

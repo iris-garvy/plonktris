@@ -2,16 +2,13 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 87px;   /* one column: textbox and squares line up */
-  /* textbox sits in the toolbar zone: 12 + 28 (textbox) + 8 (gap) = 48
-     = toolbar height + gap, so the boxes start flush with the grid top */
+  width: 87px;  
   padding-top: 12px;
 }
 
-/* ── Textbox ── */
 .queue-text-input {
   width: 87px;
-  height: 28px;  /* fixed so the column math below holds */
+  height: 28px; 
   box-sizing: border-box;
   background: var(--bg-base);
   border: 1px solid var(--border);
@@ -33,7 +30,6 @@
 .queue-text-input:focus { border-color: var(--pink); }
 .queue-text-input.readonly { pointer-events: none; }
 
-/* ── Queue column: squares + fused overflow ── */
 .queue-column {
   position: relative;
   display: flex;
@@ -60,9 +56,7 @@
 
 .queue-box.empty { opacity: 0.3; }
 
-/* ── Overflow chips: a rail snaking up the queue's right side, feeding
-   into the bottom of the visible queue. First-in-line sits at the bottom
-   corner (the entry point); later pieces stack upward. ── */
+/*overflow chips. they go up the side of the queue like a snake draft*/
 .queue-overflow {
   position: absolute;
   left: 100%;

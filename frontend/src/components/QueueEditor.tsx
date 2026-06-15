@@ -26,7 +26,6 @@ interface QueueEditorProps {
 export default function QueueEditor({ queue, onQueueChange, nextIdx = 0 }: QueueEditorProps) {
   const editable = !!onQueueChange;
 
-  // the next 6 unconsumed queue pieces (the piece in play is on the board)
   const displaySlots = Array.from({ length: 6 }, (_, i) => ({
     pieceId: queue[nextIdx + i] ?? null,
   }));
@@ -54,7 +53,6 @@ export default function QueueEditor({ queue, onQueueChange, nextIdx = 0 }: Queue
         }}
       />
 
-      {/* Queue column: 6 squares, overflow chips fused below */}
       <div className="queue-column">
         {displaySlots.map(({ pieceId }, i) => (
           <div
@@ -65,7 +63,7 @@ export default function QueueEditor({ queue, onQueueChange, nextIdx = 0 }: Queue
           </div>
         ))}
 
-        {/* overflow: pieces waiting to enter the visible queue */}
+        {/* overflow */}
         {queue.length > nextIdx + 6 && (
           <div className="queue-overflow">
             {queue.slice(nextIdx + 6).map((pid, i) => (

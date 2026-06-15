@@ -48,8 +48,8 @@ export default function PieceMini({ pieceId, size = 14, dimmed = false }: PieceM
               style={on ? {
                 background: color ?? undefined,
                 border: `1px solid color-mix(in srgb, ${color} 70%, black)`,
-                borderRadius: 1,
-              } : { borderRadius: 1 }}
+                borderRadius: 0,
+              } : { borderRadius: 0 }}
             />
           );
         })
