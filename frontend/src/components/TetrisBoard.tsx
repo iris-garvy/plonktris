@@ -38,7 +38,7 @@ interface TetrisBoardProps {
 }
 
 export default function TetrisBoard({ board, onCellToggle, onPiecePlaced, onBoardSet, onQueueView, queue, keys, handling, sidePanel }: TetrisBoardProps) {
-  const [selectedPaint, setSelectedPaint] = useState<number>(1);
+  const [selectedPaint, setSelectedPaint] = useState<number>(8);
 
   // click-drag painting: the value set on mousedown is painted onto every
   // cell the cursor passes over until mouseup

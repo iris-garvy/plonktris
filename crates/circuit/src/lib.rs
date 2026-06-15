@@ -6,6 +6,9 @@ use plonky2::plonk::circuit_data::CircuitConfig;
 use plonky2::iop::witness::{PartialWitness, WitnessWrite};
 use plonky2::plonk::config::PoseidonGoldilocksConfig;
 
+// Recursive (chunked IVC) prover — used for puzzles too long for the monolithic circuit.
+pub mod reclib;
+
 pub fn generate_proof(board: &Vec<u8>, queue: &Vec<u8>, requirements: &Vec<u8>, secret_moves: &Vec<u8>) -> Result<Vec<u8>,String> {
     let config = CircuitConfig::standard_recursion_config();
     let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);

@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 # defaults minus "parallel" so the wasm build stays single-threaded; server adds it back
 plonky2 = { version = "1.1", default-features = false, features = ["gate_testing", "rand_chacha", "std", "timing"] }
+hashbrown = "0.14"

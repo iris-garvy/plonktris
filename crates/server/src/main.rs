@@ -10,6 +10,7 @@ use plonky2::plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInp
 use plonky2::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData, VerifierCircuitData};
 use tokio::sync::Notify;
 use circuit::generate_proof;
+use circuit::reclib;
 use tower_http::cors::{CorsLayer, AllowOrigin, Any};
 use argon2::{password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},Argon2};
 use axum::http::{HeaderMap, HeaderValue, header::AUTHORIZATION};
@@ -18,7 +19,15 @@ use axum::{async_trait, extract::FromRequestParts, http::request::Parts};
 
 /// Max puzzle length the server will prove itself. Bound by VM memory (~10 at
 /// 4GB). Longer puzzles are routed to in-browser proving. Bump with the VM RAM.
-const MAX_SERVER_PIECES: usize = 10;
+// Puzzles up to this length use the fast monolithic prover; longer ones use the
+// recursive (chunked) prover, which is slower but memory-bounded.
+const MONOLITHIC_MAX_PIECES: usize = 10;
+// Pieces per recursive step proof. Padded length is a multiple of this. 4 benchmarked
+// faster than 8 for ~11 pieces (less padding) and uses less per-step memory — which
+// matters for the browser path, where the chunk size is gated by wasm memory.
+const RECURSIVE_CHUNK: usize = 4;
+
+type RecursiveCircuits = (reclib::StepCircuit, reclib::AggCircuit);
 
 struct AppState {
     db: PgPool,
@@ -26,6 +35,8 @@ struct AppState {
     new_job: Notify,
     // per-IP registration timestamps, for throttling account creation
     reg_attempts: Mutex<HashMap<String, Vec<Instant>>>,
+    // lazily-built recursive circuits, keyed by padded length
+    recursive: Mutex<HashMap<usize, Arc<RecursiveCircuits>>>,
 }
 
 #[tokio::main]
@@ -50,7 +61,7 @@ async fn main() {
     let verifiers = Arc::new(load_verifiers());
     println!("ready!");
 
-    let state = Arc::new(AppState { db: db, verifiers: verifiers, new_job: Notify::new(), reg_attempts: Mutex::new(HashMap::new()) });
+    let state = Arc::new(AppState { db: db, verifiers: verifiers, new_job: Notify::new(), reg_attempts: Mutex::new(HashMap::new()), recursive: Mutex::new(HashMap::new()) });
     let worker_state = state.clone();
 
     tokio::spawn(async move {
@@ -123,14 +134,8 @@ async fn request_proof(
     if num_pieces < 1 || num_pieces > 21 {
         return Err((StatusCode::BAD_REQUEST, "num_pieces must be between 1 and 21".into()));
     }
-    // Server-side proving is memory-bound: longer puzzles OOM the machine. Cap
-    // it to what the current VM can prove; longer puzzles must use secure
-    // (in-browser) proving. Raise MAX_SERVER_PIECES when the VM gets more RAM.
-    if num_pieces > MAX_SERVER_PIECES {
-        return Err((StatusCode::BAD_REQUEST, format!(
-            "puzzles longer than {MAX_SERVER_PIECES} pieces must use secure (in-browser) proving"
-        )));
-    }
+    // num_pieces > MONOLITHIC_MAX_PIECES is allowed now — the worker routes long
+    // puzzles to the recursive (memory-bounded) prover. The 1..=21 bound above still caps it.
     for req in 0..7 {
         req_counter += body.requirements[req];
     }
@@ -264,11 +269,19 @@ async fn process_next_job(worker_state: &Arc<AppState>) -> Result<bool, String> 
         let queue = job.queue.clone();
         let requirements = job.requirements.clone();
         let secret_moves = job.actions.unwrap().clone();
+        let num_pieces = queue.len();
+        let thread_state = worker_state.clone();
 
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         std::thread::spawn(move || {
-            let _ = tx.send(generate_proof(&board, &queue, &requirements, &secret_moves));
+            // long puzzles use the recursive (memory-bounded) prover
+            let result = if num_pieces > MONOLITHIC_MAX_PIECES {
+                prove_recursive(&thread_state, &board, &queue, &secret_moves)
+            } else {
+                generate_proof(&board, &queue, &requirements, &secret_moves)
+            };
+            let _ = tx.send(result);
         });
 
         match rx.await {
@@ -363,10 +376,16 @@ struct SubmitVerificationResponse {
 }
 
 // verify proof bytes against the verifier for this queue length
-fn verify_proof(state: &AppState, proof: &[u8], num_pieces: usize) -> Result<(), String> {
+fn verify_proof(state: &AppState, proof: &[u8], board: &[u8], queue: &[u8], requirements: &[u8]) -> Result<(), String> {
+    let num_pieces = queue.len();
     if num_pieces < 1 || num_pieces > 21 {
         return Err(format!("num_pieces must be between 1 and 21"));
     }
+    // long puzzles use the recursive prover/verifier
+    if num_pieces > MONOLITHIC_MAX_PIECES {
+        return verify_recursive(state, proof, board, queue, requirements);
+    }
+
     let (verifier_only, common) = &state.verifiers[num_pieces - 1];
     let verifier = VerifierCircuitData {
         verifier_only: verifier_only.clone(),
@@ -380,6 +399,35 @@ fn verify_proof(state: &AppState, proof: &[u8], num_pieces: usize) -> Result<(),
 
     verifier.verify(parsed)
     .map_err(|e| format!("proof verification failed: {e}"))
+}
+
+// Lazily build (and cache) the recursive circuits for a given padded length.
+fn get_or_build_recursive(state: &AppState, padded_len: usize) -> Arc<RecursiveCircuits> {
+    let mut cache = state.recursive.lock().unwrap();
+    cache.entry(padded_len).or_insert_with(|| {
+        let step = reclib::StepCircuit::build(RECURSIVE_CHUNK, padded_len);
+        let agg = reclib::build_aggregator(&step, padded_len);
+        Arc::new((step, agg))
+    }).clone()
+}
+
+// Prove a long puzzle recursively. `actions` is the flat secret_moves (num_pieces*32).
+fn prove_recursive(state: &AppState, board: &[u8], queue: &[u8], actions: &[u8]) -> Result<Vec<u8>, String> {
+    let num_pieces = queue.len();
+    let all_actions: Vec<Vec<u8>> = (0..num_pieces)
+        .map(|p| actions[p * 32..(p + 1) * 32].to_vec())
+        .collect();
+    let (pq, pa) = reclib::pad_puzzle(queue, &all_actions, RECURSIVE_CHUNK);
+    let circuits = get_or_build_recursive(state, pq.len());
+    let proof = reclib::prove_solution(&circuits.0, &circuits.1, RECURSIVE_CHUNK, board, &pq, &pa)?;
+    Ok(proof.to_bytes())
+}
+
+// Verify a recursive aggregate proof, bound to the (padded) puzzle + requirements.
+fn verify_recursive(state: &AppState, proof: &[u8], board: &[u8], queue: &[u8], requirements: &[u8]) -> Result<(), String> {
+    let (pq, _) = reclib::pad_puzzle(queue, &[], RECURSIVE_CHUNK);
+    let circuits = get_or_build_recursive(state, pq.len());
+    reclib::verify_solution_bytes(&circuits.1, proof, board, &pq, requirements, pq.len())
 }
 
 async fn submit_proof(
@@ -406,7 +454,7 @@ async fn submit_proof(
         return Err(format!("must have requirements"))
     }
 
-    verify_proof(&state, &body.proof, num_pieces)?;
+    verify_proof(&state, &body.proof, &body.board, &body.queue, &body.requirements)?;
 
     let id = sqlx::query_scalar!(
         "INSERT INTO puzzles (proof, board, queue, requirements, num_pieces, tss, tsd, tst, attack, pc, tetris, max_combo, no_hold, name, creator_id)
@@ -446,7 +494,7 @@ async fn record_solve(
     target: uuid::Uuid,
     user_id: Option<uuid::Uuid>,
 ) -> Result<uuid::Uuid, String> {
-    verify_proof(state, &proof, queue.len())?;
+    verify_proof(state, &proof, board, queue, requirements)?;
 
     let p = sqlx::query!(
         "SELECT board, queue, requirements FROM puzzles WHERE id = $1",
