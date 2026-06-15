@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO solves (puzzle_id, user_id) VALUES ($1, $2) \n            ON CONFLICT (puzzle_id, user_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d76f1c20dd07f3b95b301f6f877ce2144341a551773c3d537156ceebdd0f508d"
+}

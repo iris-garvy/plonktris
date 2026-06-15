@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE solves SET first_solve = true \n            WHERE puzzle_id = $1 AND (SELECT COUNT(*) FROM solves WHERE puzzle_id = $1) = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bb9487fe948c2a7cf1c40df7c9949a5a09921501037d8c3735480dc7d384cfcc"
+}
