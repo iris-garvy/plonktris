@@ -20,14 +20,20 @@ use axum::{async_trait, extract::FromRequestParts, http::request::Parts};
 /// Max puzzle length the server will prove itself. Bound by VM memory (~10 at
 /// 4GB). Longer puzzles are routed to in-browser proving. Bump with the VM RAM.
 // Puzzles up to this length use the fast monolithic prover; longer ones use the
-// recursive (chunked) prover, which is slower but memory-bounded.
-const MONOLITHIC_MAX_PIECES: usize = 10;
+// recursive (chunked) prover. Kept low (8) so the *browser* never runs a monolithic
+// proof big enough to be memory-flaky in wasm — 9+ get the bounded-memory path.
+// Must match MONOLITHIC_MAX_PIECES in the frontend worker.
+const MONOLITHIC_MAX_PIECES: usize = 8;
 // Pieces per recursive step proof. Padded length is a multiple of this. 4 benchmarked
 // faster than 8 for ~11 pieces (less padding) and uses less per-step memory — which
 // matters for the browser path, where the chunk size is gated by wasm memory.
 const RECURSIVE_CHUNK: usize = 4;
+// Aggregator padding for chunk=4 (uniform across recursive lengths; see discover_pads).
+// Fixed so the server and browser build *identical* aggregators (cross-verification).
+const RECURSIVE_AGG_PAD: usize = 1 << 13;
 
 type RecursiveCircuits = (reclib::StepCircuit, reclib::AggCircuit);
+type RecursiveCache = Mutex<HashMap<usize, Arc<RecursiveCircuits>>>;
 
 struct AppState {
     db: PgPool,
@@ -36,7 +42,7 @@ struct AppState {
     // per-IP registration timestamps, for throttling account creation
     reg_attempts: Mutex<HashMap<String, Vec<Instant>>>,
     // lazily-built recursive circuits, keyed by padded length
-    recursive: Mutex<HashMap<usize, Arc<RecursiveCircuits>>>,
+    recursive: RecursiveCache,
 }
 
 #[tokio::main]
@@ -277,7 +283,7 @@ async fn process_next_job(worker_state: &Arc<AppState>) -> Result<bool, String> 
         std::thread::spawn(move || {
             // long puzzles use the recursive (memory-bounded) prover
             let result = if num_pieces > MONOLITHIC_MAX_PIECES {
-                prove_recursive(&thread_state, &board, &queue, &secret_moves)
+                prove_recursive(&thread_state.recursive, &board, &queue, &secret_moves)
             } else {
                 generate_proof(&board, &queue, &requirements, &secret_moves)
             };
@@ -383,7 +389,7 @@ fn verify_proof(state: &AppState, proof: &[u8], board: &[u8], queue: &[u8], requ
     }
     // long puzzles use the recursive prover/verifier
     if num_pieces > MONOLITHIC_MAX_PIECES {
-        return verify_recursive(state, proof, board, queue, requirements);
+        return verify_recursive(&state.recursive, proof, board, queue, requirements);
     }
 
     let (verifier_only, common) = &state.verifiers[num_pieces - 1];
@@ -402,31 +408,31 @@ fn verify_proof(state: &AppState, proof: &[u8], board: &[u8], queue: &[u8], requ
 }
 
 // Lazily build (and cache) the recursive circuits for a given padded length.
-fn get_or_build_recursive(state: &AppState, padded_len: usize) -> Arc<RecursiveCircuits> {
-    let mut cache = state.recursive.lock().unwrap();
-    cache.entry(padded_len).or_insert_with(|| {
+fn get_or_build_recursive(cache: &RecursiveCache, padded_len: usize) -> Arc<RecursiveCircuits> {
+    let mut map = cache.lock().unwrap();
+    map.entry(padded_len).or_insert_with(|| {
         let step = reclib::StepCircuit::build(RECURSIVE_CHUNK, padded_len);
-        let agg = reclib::build_aggregator(&step, padded_len);
+        let agg = reclib::build_aggregator_padded(&step, padded_len, RECURSIVE_AGG_PAD);
         Arc::new((step, agg))
     }).clone()
 }
 
 // Prove a long puzzle recursively. `actions` is the flat secret_moves (num_pieces*32).
-fn prove_recursive(state: &AppState, board: &[u8], queue: &[u8], actions: &[u8]) -> Result<Vec<u8>, String> {
+fn prove_recursive(cache: &RecursiveCache, board: &[u8], queue: &[u8], actions: &[u8]) -> Result<Vec<u8>, String> {
     let num_pieces = queue.len();
     let all_actions: Vec<Vec<u8>> = (0..num_pieces)
         .map(|p| actions[p * 32..(p + 1) * 32].to_vec())
         .collect();
     let (pq, pa) = reclib::pad_puzzle(queue, &all_actions, RECURSIVE_CHUNK);
-    let circuits = get_or_build_recursive(state, pq.len());
+    let circuits = get_or_build_recursive(cache, pq.len());
     let proof = reclib::prove_solution(&circuits.0, &circuits.1, RECURSIVE_CHUNK, board, &pq, &pa)?;
     Ok(proof.to_bytes())
 }
 
 // Verify a recursive aggregate proof, bound to the (padded) puzzle + requirements.
-fn verify_recursive(state: &AppState, proof: &[u8], board: &[u8], queue: &[u8], requirements: &[u8]) -> Result<(), String> {
+fn verify_recursive(cache: &RecursiveCache, proof: &[u8], board: &[u8], queue: &[u8], requirements: &[u8]) -> Result<(), String> {
     let (pq, _) = reclib::pad_puzzle(queue, &[], RECURSIVE_CHUNK);
-    let circuits = get_or_build_recursive(state, pq.len());
+    let circuits = get_or_build_recursive(cache, pq.len());
     reclib::verify_solution_bytes(&circuits.1, proof, board, &pq, requirements, pq.len())
 }
 
@@ -1105,4 +1111,37 @@ fn load_verifiers() -> Vec<VerifierData> {
         verifiers.push((verifier_only, common));
     }
     verifiers
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // End-to-end recursive path exactly as the server runs it: prove_recursive -> proof
+    // bytes -> verify_recursive, for an 11-piece puzzle (> MONOLITHIC_MAX_PIECES). Exercises
+    // pad_puzzle (11 -> 12 at chunk 4), the circuit cache, the bytes round-trip, and binding.
+    // No DB required (helpers take only the cache).
+    #[test]
+    fn recursive_server_roundtrip() {
+        let cache: RecursiveCache = Mutex::new(HashMap::new());
+        let board = vec![0u8; 210];
+        let queue: Vec<u8> = (0..11).map(|i| (i % 7) as u8).collect();
+        let requirements = vec![0u8; 8];
+
+        // flat actions (11 * 32): move each piece right by k%8 (1=RIGHT, 6=NOOP) so they
+        // spread across columns and don't stack into a spawn collision.
+        let mut actions = Vec::with_capacity(11 * 32);
+        for k in 0..11u8 {
+            for a in 0..32u8 {
+                actions.push(if a < (k % 8) { 1u8 } else { 6u8 });
+            }
+        }
+
+        let proof = prove_recursive(&cache, &board, &queue, &actions).expect("prove failed");
+        verify_recursive(&cache, &proof, &board, &queue, &requirements).expect("verify failed");
+
+        // soundness: a different queue must be rejected by the binding
+        let wrong: Vec<u8> = (0..11).map(|i| ((i + 1) % 7) as u8).collect();
+        assert!(verify_recursive(&cache, &proof, &board, &wrong, &requirements).is_err());
+    }
 }

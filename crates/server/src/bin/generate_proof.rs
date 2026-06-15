@@ -5,8 +5,6 @@ use plonky2::iop::witness::{PartialWitness, WitnessWrite};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::circuit_data::CircuitConfig;
 use plonky2::plonk::config::PoseidonGoldilocksConfig;
-use rayon::ThreadPoolBuilder;
-use num_cpus::get;
 
 fn main() {
     let config = CircuitConfig::standard_recursion_config();

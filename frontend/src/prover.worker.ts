@@ -1,6 +1,11 @@
-import init, { prove_requirements } from "./pkg/wasm.js";
+import init, { prove_requirements, prove_requirements_recursive } from "./pkg/wasm.js";
 
 const SERVER_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
+// Must match the server's MONOLITHIC_MAX_PIECES: puzzles longer than this use the
+// recursive (memory-bounded) prover so they fit in wasm, and the server verifies them
+// as recursive proofs.
+const MONOLITHIC_MAX_PIECES = 8;
 
 let wasmReady = false;
 
@@ -31,8 +36,11 @@ onmessage = async function (e: MessageEvent<ProveRequest>) {
 
     try {
         if (mode === "browser") {
-            // prove locally, then send only the proof — the solution never leaves the browser
-            const proof = prove_requirements(board, queue, requirements, secretMoves);
+            // prove locally, then send only the proof — the solution never leaves the browser.
+            // long puzzles use the recursive prover (bounded memory) so they fit in wasm.
+            const proof = queue.length > MONOLITHIC_MAX_PIECES
+                ? prove_requirements_recursive(board, queue, requirements, secretMoves)
+                : prove_requirements(board, queue, requirements, secretMoves);
             const headers: Record<string, string> = { "Content-Type": "application/json" };
             if (token) headers["Authorization"] = `Bearer ${token}`;
             const res = await fetch(`${SERVER_URL}/submit`, {

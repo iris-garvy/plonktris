@@ -5,6 +5,52 @@ use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::plonk::circuit_data::{CircuitConfig};
 use wasm_bindgen::prelude::*;
 use circuit::*;
+use circuit::reclib;
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::collections::HashMap;
+
+// Recursive prover config — must match the server (crates/server/src/main.rs) so the
+// server can verify browser-made proofs.
+const REC_CHUNK: usize = 4;
+const REC_AGG_PAD: usize = 1 << 13;
+
+thread_local! {
+    // built circuits cached per padded length (the worker keeps wasm loaded across proofs)
+    static REC_CACHE: RefCell<HashMap<usize, Rc<(reclib::StepCircuit, reclib::AggCircuit)>>> =
+        RefCell::new(HashMap::new());
+}
+
+fn rec_circuits(padded_len: usize) -> Rc<(reclib::StepCircuit, reclib::AggCircuit)> {
+    REC_CACHE.with(|c| {
+        c.borrow_mut().entry(padded_len).or_insert_with(|| {
+            let step = reclib::StepCircuit::build(REC_CHUNK, padded_len);
+            // padded build (no catch_unwind — that's a no-op under wasm panic=abort)
+            let agg = reclib::build_aggregator_padded(&step, padded_len, REC_AGG_PAD);
+            Rc::new((step, agg))
+        }).clone()
+    })
+}
+
+/// Recursive (chunked) in-browser prover for long puzzles. Same inputs as
+/// `prove_requirements`; requirements are checked server-side at verify time.
+#[wasm_bindgen]
+pub fn prove_requirements_recursive(
+    board: &[u8],
+    queue: &[u8],
+    _requirements: &[u8],
+    secret_moves: &[u8],
+) -> Result<Vec<u8>, JsValue> {
+    let num_pieces = queue.len();
+    let all_actions: Vec<Vec<u8>> = (0..num_pieces)
+        .map(|p| secret_moves[p * 32..(p + 1) * 32].to_vec())
+        .collect();
+    let (pq, pa) = reclib::pad_puzzle(queue, &all_actions, REC_CHUNK);
+    let circuits = rec_circuits(pq.len());
+    let proof = reclib::prove_solution(&circuits.0, &circuits.1, REC_CHUNK, board, &pq, &pa)
+        .map_err(|e| JsValue::from_str(&e))?;
+    Ok(proof.to_bytes())
+}
 
 
 #[wasm_bindgen]

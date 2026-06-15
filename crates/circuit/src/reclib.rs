@@ -404,7 +404,7 @@ pub fn build_aggregator(step: &StepCircuit, num_pieces: usize) -> AggCircuit {
     panic!("build_aggregator: no padding in 2^13..=2^18 matched the aggregator's degree");
 }
 
-fn build_aggregator_padded(step: &StepCircuit, num_pieces: usize, pad_to: usize) -> AggCircuit {
+pub fn build_aggregator_padded(step: &StepCircuit, num_pieces: usize, pad_to: usize) -> AggCircuit {
     let mut b = CircuitBuilder::<F, D>::new(CircuitConfig::standard_recursion_config());
     let l = 55 + num_pieces;
 
@@ -1354,6 +1354,24 @@ mod tests {
             let prove_ms = t.elapsed().as_millis();
 
             println!("{:5} | {:5} | {:9} | {:9}", chunk, num_pieces / chunk, build_ms, prove_ms);
+        }
+    }
+
+    // Discover the aggregator pad per recursive padded-length at chunk=4 (for hardcoding
+    // in the wasm builder, where catch_unwind/auto-tune doesn't work).
+    // Run: cargo test -p circuit --release discover_pads -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn discover_pads() {
+        let chunk = 4;
+        for &len in &[12usize, 16, 20, 24] {
+            let step = StepCircuit::build(chunk, len);
+            for pad_bits in 12..=18 {
+                let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    build_aggregator_padded(&step, len, 1 << pad_bits)
+                })).is_ok();
+                if ok { println!("PAD: chunk=4 len={} pad_bits={}", len, pad_bits); break; }
+            }
         }
     }
 
