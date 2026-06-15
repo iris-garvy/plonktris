@@ -88,7 +88,7 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
         <h2>controls</h2>
         <p>
           Move, rotate, hard/soft drop and hold with the keyboard. You can view
-          and rebind everything from the <GearIcon className="btn-icon" /> button in the header.
+          and rebind everything from the <GearIcon className="btn-icon" />button in the header.
         </p>
       </section>
 
