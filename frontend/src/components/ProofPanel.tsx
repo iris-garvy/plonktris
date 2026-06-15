@@ -39,7 +39,7 @@ export default function ProofPanel({ isProving, error, proof, onProve, disabled,
             className={`prove-btn ${isProving && !pressedSecure ? 'proving' : ''}`}
             onClick={() => press(false)}
             disabled={isProving || disabled || rateLimited}
-            title={rateLimited ? 'fast proving limit reached — use secure proving' : undefined}
+            title={rateLimited ? 'must use secure proving' : undefined}
           >
             {isProving && !pressedSecure ? (
               <span className="proving-inner"><span className="spinner" />submitting…</span>
@@ -76,13 +76,12 @@ export default function ProofPanel({ isProving, error, proof, onProve, disabled,
             </>
           ) : provedSecurely ? (
             <>
-              <div className="success-label">verified! &amp; recorded!</div>
-              <div className="success-sub">proved!</div>
+              <div className="success-label">verified!</div>
             </>
           ) : (
             <>
               <div className="success-label">submitted!</div>
-              <div className="success-sub">check your profile for the result</div>
+              <div className="success-sub">check your profile for progress</div>
             </>
           )}
         </div>
