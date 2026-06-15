@@ -30,7 +30,7 @@ export default function RequirementsModal({ requirements, onChange, name, onName
           onRequirementsChange={onChange}
         />
         <div className="modal-actions">
-          <button className="modal-btn cancel" onClick={onCancel}>cancel</button>
+          <button className="modal-btn cancel" onClick={onCancel}>cancel</button> {/* okay ikd why this guy hates me*/}
           <button className="modal-btn submit" onClick={onSubmit}><GlassIcon className="btn-icon glass-nudge" />prove</button>
         </div>
       </div>
