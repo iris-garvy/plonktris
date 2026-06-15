@@ -84,11 +84,10 @@
   flex: 0 0 auto;
 }
 
-/* info column */
 .puzzle-info {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
   min-width: 0;
   flex: 1;
 }
