@@ -27,7 +27,6 @@ const REQ_NAMES = ['TSS', 'TSD', 'TST', 'TETRIS', 'PC', 'ATTACK', 'COMBO'];
 type View = 'home' | 'search' | 'create' | 'play' | 'profile' | 'about';
 type Stage = 'edit' | 'solve';
 
-/** A fetched puzzle plus its frontend-format conversions. */
 interface PlayPuzzle extends Puzzle {
   boardRows: Board;
   queueIds: number[];
