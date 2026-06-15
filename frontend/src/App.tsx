@@ -299,19 +299,19 @@ function App() {
             className={`stage-tab ${view === 'search' ? 'active' : ''}`}
             onClick={gotoSearch}
           >
-            SEARCH
+            search
           </button>
           <button
             className={`stage-tab ${view === 'create' ? 'active' : ''}`}
             onClick={gotoCreate}
           >
-            CREATE
+            create
           </button>
           <button
             className={`stage-tab ${view === 'about' ? 'active' : ''}`}
             onClick={gotoAbout}
           >
-            ABOUT
+            about
           </button>
         </nav>
 
@@ -337,11 +337,11 @@ function App() {
                 onClick={handleStartSolving}
                 disabled={queue.length === 0}
               >
-                <GlassIcon className="btn-icon" />SOLVE
+                <GlassIcon className="btn-icon" />prove
               </button>
             ) : (
               <button className="stage-tab" onClick={handleBackToEdit}>
-                <ArrowLeft className="glyph-icon glyph-lead" />EDIT
+                <ArrowLeft className="glyph-icon glyph-lead" />edit
               </button>
             )
           )}
@@ -436,7 +436,7 @@ function App() {
                     onClick={handleStartSolving}
                     disabled={queue.length === 0}
                   >
-                    <GlassIcon className="btn-icon" />solve
+                    <GlassIcon className="btn-icon glass-nudge" />prove
                   </button>
                 }
               />

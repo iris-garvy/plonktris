@@ -19,9 +19,9 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
   return (
     <div className="about-page">
       <section className="about-hero">
-        <h1 className="about-title">what's plonktris?</h1>
+        <h1 className="about-title">WHAT'S PLONKTRIS?</h1>
         <p className="about-lead">
-          Plonktris is a tetris puzzle website where users can submit puzzles with complete privacy. Plonktris validates that puzzles are 
+          plonktris is a tetris puzzle website where users can submit puzzles with complete privacy. Plonktris validates that puzzles are 
           solvable but does not store solutions, so the creator maintains total control over the solution.
         </p>
       </section>
@@ -30,11 +30,9 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
         <h2>creating a puzzle</h2>
         <ol className="about-steps">
           <li>In <strong>create</strong>, draw a starting board and set the piece queue.</li>
-          <li>Choose the requirements a solver must hit.</li>
-          <li>
-            Solve it yourself to prove it's possible — that solution is what gets
-            published. You'll need an account to publish.
-          </li>
+          <li>Hit the <strong>prove</strong> button and set the requirements for the puzzle.</li>
+          <li>Prove your puzzle is solvable by solving it yourself.</li>
+          <li>Press the <strong>submit</strong> button. Plonktris will then verify your puzzle with a zero knowledge proof and publish it!</li>
         </ol>
       </section>
 
@@ -42,11 +40,11 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
         <h2>solving a puzzle</h2>
         <ol className="about-steps">
           <li>Open a puzzle from the home page or search.</li>
-          <li>Solve the puzzle by fulfilling the requirements!</li>
+          <li>Solve the puzzle by fulfilling the requirements</li>
           <li>
             When the requirements are met, hit <strong>submit</strong>. Prooftris will generate a proof
             that you know a solution. If you're logged in, the solve is recorded
-            on your profile (and you might just be the first to do it)!
+            on your profile.
           </li>
         </ol>
       </section>
@@ -69,16 +67,16 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
           <div className="about-mode">
             <div className="about-mode-name"><CircleIcon className="btn-icon" />fast (default)</div>
             <p>
-              The server generates the proof. Quick, and you can close the tab —
-              the result shows up on your profile when it's done.
+              The server generates the proof. This is speedy (~10 seconds) 
+              and is handled in the cloud so you can close your browser and check on its progress in your profile page.
             </p>
           </div>
           <div className="about-mode">
             <div className="about-mode-name"><LockIcon className="btn-icon" />secure (slow)</div>
             <p>
-              Your browser generates the proof, so your solution never leaves your
-              device — truly zero-knowledge. It's slower and you must keep the tab
-              open. Turn it on under settings on your profile.
+              The browser generates the proof. This is quite a bit slower (~2 minutes) and you
+              cannot leave the site while the proof is generating. You can turn this option on in your
+              profile page.
             </p>
           </div>
         </div>

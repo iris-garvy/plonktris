@@ -7,13 +7,11 @@
 }
 
 :root {
-  /* light theme: succinct-style warm cream + the original pink/lavender,
-     deepened where they need to read against light backgrounds */
   --pink:          #ee3d99;   /* interactive pink */
-  --pink-soft:     #ffbdde;   /* original pastel, for tints and fills */
+  --pink-soft:     #ffbdde;   /* for tints and fills */
   --lavender:      #7a63e0;   /* interactive lavender */
   --lavender-soft: #b5a5ff;
-  --bg-base:       #fdf6f0;   /* warm cream */
+  --bg-base:       #fdf6f0;   
   --bg-panel:      #ffffff;
   --bg-raised:     #f6ebe7;
   --border:        #e6d8d2;
@@ -255,9 +253,12 @@ html, body {
   height: 1em;
   width: auto;
   vertical-align: -0.15em;
-  margin-right: 0.4em;
+  margin-right: 0.3em;
   fill: currentColor;
 }
+/* magnifying glass reads right-of-center (its handle) when inline beside text;
+   nudge it left. Only on the inline solve buttons, not the stacked header tab. */
+.glass-nudge { transform: translateX(-2px); }
 /* two-tone cutouts (lock keyhole, gear center) match the app surface */
 .btn-icon .cut {
   fill: var(--bg-base);
@@ -337,7 +338,6 @@ html, body {
   cursor: default;
 }
 
-/* proof plock */
 .right-proof {
   margin-top: 8px; 
   width: 80px;
