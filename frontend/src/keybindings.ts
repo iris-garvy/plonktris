@@ -53,7 +53,7 @@ export const BINDING_LABELS: Record<BindingAction, string> = {
   hold:       'hold',
   place:      'place',
   undo:       'undo',
-  clearBoard: 'clear',
+  clearBoard: 'reset',
 };
 
 // single chars compare lowercase so shift state doesn't matter
