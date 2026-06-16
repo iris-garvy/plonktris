@@ -12,7 +12,7 @@ import ProfilePage from './components/ProfilePage';
 import AboutPage from './components/AboutPage';
 import AuthModal from './components/AuthModal';
 import KeybindingsModal from './components/KeybindingsModal';
-import { ArrowLeft, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Link2, Check } from 'lucide-react';
 import { GearIcon, GlassIcon } from './components/icons';
 import { boardToUint8, movesToUint8, clearLines, BOARD_COLS, BOARD_ROWS, type Board, type CellPos, type SecretMoves } from './tetrisUtils';
 import { emptyLedger, requirementsMet, type Ledger, type Requirements } from './tetrisLedger';
@@ -53,6 +53,7 @@ function App() {
   const [profileUser, setProfileUser] = useState<string | null>(null);
 
   const [user, setUser] = useState<User | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -184,6 +185,16 @@ function App() {
   function openPlay(puzzle: Puzzle) {
     if (secureProvingActive) return;
     pushPath('/p/' + puzzle.id); showPlay(puzzle);
+  }
+
+  // copy a shareable link to the current puzzle (the URL is already /p/:id in play mode)
+  async function copyPuzzleLink() {
+    const url = playPuzzle ? `${window.location.origin}/p/${playPuzzle.id}` : window.location.href;
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1500);
+    } catch { /* clipboard unavailable (insecure context / denied) */ }
   }
 
   // Restore the view from the URL: initial page load and browser back/forward.
@@ -346,6 +357,9 @@ function App() {
                 </button>
               ) : 'anonymous'}
             </span>
+            <button className="share-link-btn" onClick={copyPuzzleLink} title="Copy link to this puzzle">
+              {linkCopied ? <><Check className="glyph-icon" />copied</> : <><Link2 className="glyph-icon" />share</>}
+            </button>
           </div>
         )}
 

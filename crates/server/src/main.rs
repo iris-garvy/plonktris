@@ -51,8 +51,18 @@ async fn main() {
 
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://localhost/plonktris".to_string());
-    let db = PgPool::connect(&database_url)
-    .await.unwrap();
+    // Fly drops idle/old TCP connections; bare PgPool::connect would then hand out a dead
+    // one and a request fails with "got 0 bytes at EOF". Ping before handing out (skip dead
+    // conns), keep one warm, and recycle connections well before Fly's cutoff.
+    let db = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(10)
+        .min_connections(1)
+        .acquire_timeout(Duration::from_secs(10))
+        .idle_timeout(Duration::from_secs(300))
+        .max_lifetime(Duration::from_secs(1800))
+        .test_before_acquire(true)
+        .connect(&database_url)
+        .await.unwrap();
 
     // Reclaim jobs orphaned by a previous crash/restart: a job marked 'proving'
     // when the process died is never re-selected (the worker only picks 'pending'),
