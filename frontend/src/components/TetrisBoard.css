@@ -40,8 +40,8 @@
 }
 
 .palette-swatch {
-  width: 22px;
-  height: 22px;
+  width: calc(var(--cell-size) * 0.846);   /* 22px at 26; shrinks with the board so 9 swatches fit */
+  height: calc(var(--cell-size) * 0.846);
   padding: 0;
   box-sizing: border-box;
   cursor: pointer;
@@ -134,8 +134,9 @@
 
 .hold-box {
   /* same size as a queue box */
-  width: 87px;
-  height: 87px;
+  width: var(--box);
+  height: var(--box);
+  --mini-cell: calc(var(--cell-size) * 0.461);  /* 12px at 26; scales the held-piece mini */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -157,16 +158,16 @@
 
 .tetris-grid {
   display: grid;
-  grid-template-columns: repeat(10, 26px);
-  grid-template-rows: repeat(20, 26px); /* rows 1-20; row 0 is hidden spawn */
+  grid-template-columns: repeat(10, var(--cell-size));
+  grid-template-rows: repeat(20, var(--cell-size)); /* rows 1-20; row 0 is hidden spawn */
   background: var(--bg-panel);
   border: 1px solid var(--border);
   cursor: crosshair;
 }
 
 .cell {
-  width: 26px;
-  height: 26px;
+  width: var(--cell-size);
+  height: var(--cell-size);
   box-sizing: border-box;
   border-right: 1px solid rgba(0, 0, 0, 0.07);
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);

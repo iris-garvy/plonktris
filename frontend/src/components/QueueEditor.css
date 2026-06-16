@@ -2,13 +2,13 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 87px;  
+  width: var(--box);
   padding-top: 12px;
 }
 
 .queue-text-input {
-  width: 87px;
-  height: 28px; 
+  width: var(--box);
+  height: 28px;
   box-sizing: border-box;
   background: var(--bg-base);
   border: 1px solid var(--border);
@@ -34,14 +34,15 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  width: 87px;
+  width: var(--box);
   gap: 0;
 }
 
-/* 6 × 87 = 522 = board height (20×26 + borders), top and bottom flush */
+/* 6 boxes ≈ board height (20 cells). Scales with --cell-size; == 87px at 26px. */
 .queue-box {
-  width: 87px;
-  height: 87px;
+  width: var(--box);
+  height: var(--box);
+  --mini-cell: calc(var(--cell-size) * 0.615);  /* 16px at 26; scales the queued-piece mini */
   display: flex;
   align-items: center;
   justify-content: center;

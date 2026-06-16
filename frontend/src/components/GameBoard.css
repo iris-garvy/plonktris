@@ -45,15 +45,15 @@
 /* Play grid — identical sizing to edit grid */
 .play-grid {
   display: grid;
-  grid-template-columns: repeat(10, 26px);
-  grid-template-rows: repeat(20, 26px); /* rows 1-20; row 0 is hidden spawn */
+  grid-template-columns: repeat(10, var(--cell-size));
+  grid-template-rows: repeat(20, var(--cell-size)); /* rows 1-20; row 0 is hidden spawn */
   background: var(--bg-panel);
   border: 1px solid var(--border);
 }
 
 .play-grid .cell {
-  width: 26px;
-  height: 26px;
+  width: var(--cell-size);
+  height: var(--cell-size);
   box-sizing: border-box;
   border-right: 1px solid rgba(0, 0, 0, 0.07);
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);

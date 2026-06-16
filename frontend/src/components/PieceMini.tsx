@@ -11,11 +11,15 @@ export default function PieceMini({ pieceId, size = 14, dimmed = false }: PieceM
   const shape = pieceId != null ? TETROMINOES[pieceId]?.[0] : null;
   const color = pieceId != null ? PIECE_TYPES[pieceId]?.color : null;
 
+  // Cell size falls back to the `size` prop, but a parent can override via --mini-cell so the
+  // mini scales with the board on narrow screens (see .hold-box / .queue-box).
+  const cell = `var(--mini-cell, ${size}px)`;
+
   if (!shape) {
     return (
       <div
         className="piece-mini-empty"
-        style={{ width: size * 2, height: size * 2, opacity: dimmed ? 0.3 : 1 }}
+        style={{ width: `calc(${cell} * 2)`, height: `calc(${cell} * 2)`, opacity: dimmed ? 0.3 : 1 }}
       />
     );
   }
@@ -33,8 +37,8 @@ export default function PieceMini({ pieceId, size = 14, dimmed = false }: PieceM
       className="piece-mini"
       style={{
         display: 'grid',
-        gridTemplateColumns: `repeat(${w}, ${size}px)`,
-        gridTemplateRows:    `repeat(${h}, ${size}px)`,
+        gridTemplateColumns: `repeat(${w}, ${cell})`,
+        gridTemplateRows:    `repeat(${h}, ${cell})`,
         gap: 1,
         opacity: dimmed ? 0.3 : 1,
       }}

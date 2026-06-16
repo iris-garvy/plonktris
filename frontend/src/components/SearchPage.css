@@ -66,12 +66,21 @@
 .filter-dash { color: var(--text-muted); font-size: 12px; }
 
 .filter-select {
-  background: var(--bg-panel);
+  /* Safari/WebKit draws its own rounded, shadowed select chrome unless appearance is reset.
+     Resetting it also removes the native arrow, so we supply one as a background SVG. */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-color: var(--bg-panel);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none' stroke='%23a3928f' stroke-width='1.5'><path d='M1 1l4 4 4-4'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
   border: 1px solid var(--border);
+  border-radius: 0;
   color: var(--text);
   font-family: inherit;
   font-size: 12px;
-  padding: 4px 6px;
+  padding: 4px 22px 4px 6px; /* extra right padding leaves room for the custom arrow */
   outline: none;
   cursor: pointer;
 }

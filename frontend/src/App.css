@@ -18,6 +18,12 @@
   --text:          #181117;
   --text-dim:      #4e4350;
   --text-muted:    #a3928f;
+
+  /* Board scale. 26px on desktop/tablet; shrinks on narrow phones so the board + its hold
+     box and queue fit without overflow. Pieces and chrome are all derived from this, so the
+     whole board scales as one. At any viewport >= ~400px this is exactly 26px (unchanged). */
+  --cell-size: clamp(15px, 6.5vw, 26px);
+  --box:       calc(var(--cell-size) * 3.346);  /* hold & queue box (== 87px at 26px) */
 }
 
 html {
@@ -367,9 +373,16 @@ html, body {
   outline-offset: 2px;
 }
 
-@media (max-width: 900px) {
+/* Keep the board + queue side-by-side (board centered) as long as they fit — that's down
+   to ~520px. Only below that, where a 10-wide board + queue genuinely can't sit side-by-side,
+   do we stack; and then the queue is compact and centered under the board, not a stretched block.
+   (Real mobile — a board that scales down — is a separate, bigger effort.) */
+@media (max-width: 520px) {
+  .app { padding-left: 10px; padding-right: 10px; }
   .app-main { flex-direction: column; align-items: center; }
-  .sidebar { position: static; width: 100%; max-width: 340px; }
+  .sidebar { position: static; }
+  .sidebar-left { display: none; }          /* drop the empty centering spacer when stacked */
+  .sidebar-right { width: auto; }           /* natural queue width, centered under the board */
 }
 
 @media (prefers-reduced-motion: reduce) {
