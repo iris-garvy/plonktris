@@ -373,16 +373,45 @@ html, body {
   outline-offset: 2px;
 }
 
-/* Keep the board + queue side-by-side (board centered) as long as they fit — that's down
-   to ~520px. Only below that, where a 10-wide board + queue genuinely can't sit side-by-side,
-   do we stack; and then the queue is compact and centered under the board, not a stretched block.
-   (Real mobile — a board that scales down — is a separate, bigger effort.) */
+/* Mobile-only compact hold + queue chips, shown in place of the full-size hold box and queue
+   boxes (hidden in the media query below). Reuses the puzzle-card chip look. */
+.mobile-queue-strip { display: none; }
+.mqs-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text);
+  background: color-mix(in srgb, var(--pc) 45%, white);
+  border: 1px solid color-mix(in srgb, var(--pc) 75%, black);
+  flex-shrink: 0;
+}
+.mqs-chip.mqs-hold { background: var(--bg-raised); border: 1px dashed var(--border); }
+.mqs-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
+
+/* Below ~520px a 10-wide board fills the screen, so the board becomes a compact VIEW: it
+   scales down (see --cell-size), the hold box / queue boxes / prove buttons are replaced by the
+   chip strip above, and the board is centered on its own. (Touch play is a separate effort.) */
 @media (max-width: 520px) {
   .app { padding-left: 10px; padding-right: 10px; }
   .app-main { flex-direction: column; align-items: center; }
-  .sidebar { position: static; }
-  .sidebar-left { display: none; }          /* drop the empty centering spacer when stacked */
-  .sidebar-right { width: auto; }           /* natural queue width, centered under the board */
+  /* extra specificity (parent selector) so these beat the equal-specificity display rules
+     in TetrisBoard.css / GameBoard.css regardless of stylesheet import order */
+  .app-main .sidebar { display: none; }              /* big queue boxes / text input */
+  .board-section .board-side-panel { display: none; }/* hold box + prove/submit + hints */
+  .stage-tabs .create-stage { display: none; }       /* header prove/edit button */
+  .mobile-queue-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    max-width: 100%;
+    margin-bottom: 2px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

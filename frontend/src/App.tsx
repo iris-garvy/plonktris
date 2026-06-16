@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react';
 import './App.css';
 import { usePlonkyProver } from './usePlonkyProver';
 import TetrisBoard, { type QueueView } from './components/TetrisBoard';
@@ -14,7 +14,7 @@ import AuthModal from './components/AuthModal';
 import KeybindingsModal from './components/KeybindingsModal';
 import { ArrowLeft, ChevronDown } from 'lucide-react';
 import { GearIcon, GlassIcon } from './components/icons';
-import { boardToUint8, movesToUint8, clearLines, BOARD_COLS, BOARD_ROWS, type Board, type CellPos, type SecretMoves } from './tetrisUtils';
+import { boardToUint8, movesToUint8, clearLines, PIECE_TYPES, BOARD_COLS, BOARD_ROWS, type Board, type CellPos, type SecretMoves } from './tetrisUtils';
 import { emptyLedger, requirementsMet, type Ledger, type Requirements } from './tetrisLedger';
 import { loadBindings, saveBindings, loadHandling, saveHandling, type Bindings, type Handling } from './keybindings';
 import { api, getToken, setToken, type Puzzle, type User } from './api';
@@ -295,6 +295,7 @@ function App() {
     runProve(secure);
   }
 
+  const activeQueue = view === 'play' ? (playPuzzle?.queueIds ?? []) : queue;
   const activeReqs = view === 'play' ? playPuzzle?.requirements : requirements;
   const reqsDone   = activeReqs ? requirementsMet(ledger, activeReqs) : false;
   const showProgress = view === 'play' || reqsConfirmed;
@@ -353,14 +354,14 @@ function App() {
           {view === 'create' && (
             stage === 'edit' ? (
               <button
-                className="stage-tab"
+                className="stage-tab create-stage"
                 onClick={handleStartSolving}
                 disabled={queue.length === 0}
               >
                 <GlassIcon className="btn-icon" />prove
               </button>
             ) : (
-              <button className="stage-tab" onClick={handleBackToEdit}>
+              <button className="stage-tab create-stage" onClick={handleBackToEdit}>
                 <ArrowLeft className="glyph-icon glyph-lead" />edit
               </button>
             )
@@ -440,6 +441,20 @@ function App() {
 
           {/* CENTER: board (action block renders under the hold box) */}
           <section className="board-section">
+            {/* mobile-only: compact hold + queue chips in place of the full-size side panels */}
+            <div className="mobile-queue-strip" aria-hidden="true">
+              <span className="mqs-chip mqs-hold" title="hold" />
+              <span className="mqs-sep" />
+              {activeQueue.map((id, i) => (
+                <span
+                  key={i}
+                  className="mqs-chip"
+                  style={{ '--pc': PIECE_TYPES[id]?.color ?? '#999' } as CSSProperties}
+                >
+                  {PIECE_TYPES[id]?.name ?? '?'}
+                </span>
+              ))}
+            </div>
             {view === 'create' && stage === 'edit' ? (
               <TetrisBoard
                 board={board}
