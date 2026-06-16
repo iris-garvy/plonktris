@@ -32,7 +32,7 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
           <li>In <strong>create</strong>, draw a starting board and set the piece queue.</li>
           <li>Hit the <strong>prove</strong> button and set the requirements for the puzzle.</li>
           <li>Prove your puzzle is solvable by solving it yourself.</li>
-          <li>Press the <strong>submit</strong> button. plonktris will then verify your puzzle with a zero knowledge proof and publish it!</li>
+          <li>Press the <strong>submit</strong> button. plonktris will generate a proof of solvability and publish it!</li>
         </ol>
       </section>
 
