@@ -144,38 +144,17 @@ function App() {
     setProofError(null);
   }
 
-  function gotoHome() {
-    resetRunState();
-    setPlayPuzzle(null);
-    setView('home');
+  // ---- routing ----
+  // State-only view transitions (no URL change). Shared by the nav handlers (which also
+  // push a URL) and by URL restoration (initial load + back/forward), so both paths agree.
+  function showHome()   { resetRunState(); setPlayPuzzle(null); setView('home'); }
+  function showSearch() { resetRunState(); setPlayPuzzle(null); setView('search'); }
+  function showCreate() { resetRunState(); setPlayPuzzle(null); setView('create'); }
+  function showAbout()  { resetRunState(); setPlayPuzzle(null); setView('about'); }
+  function showProfile(username: string) {
+    resetRunState(); setPlayPuzzle(null); setProfileUser(username); setView('profile');
   }
-
-  function gotoSearch() {
-    resetRunState();
-    setPlayPuzzle(null);
-    setView('search');
-  }
-
-  function gotoCreate() {
-    resetRunState();
-    setPlayPuzzle(null);
-    setView('create');
-  }
-
-  function gotoAbout() {
-    resetRunState();
-    setPlayPuzzle(null);
-    setView('about');
-  }
-
-  function gotoProfile(username: string) {
-    resetRunState();
-    setPlayPuzzle(null);
-    setProfileUser(username);
-    setView('profile');
-  }
-
-  function openPlay(puzzle: Puzzle) {
+  function showPlay(puzzle: Puzzle) {
     // server formats → frontend formats: occupancy bits → gray cells,
     // prover piece ids 0-6 → frontend ids 1-7
     const rows = Array.from({ length: BOARD_ROWS }, (_, r) =>
@@ -183,14 +162,49 @@ function App() {
         puzzle.board[r * BOARD_COLS + c] ? 8 : 0
       )
     );
-    setPlayPuzzle({
-      ...puzzle,
-      boardRows: rows,
-      queueIds: puzzle.queue.map(id => id + 1),
-    });
+    setPlayPuzzle({ ...puzzle, boardRows: rows, queueIds: puzzle.queue.map(id => id + 1) });
     resetRunState();
     setView('play');
   }
+
+  function pushPath(path: string) {
+    if (window.location.pathname !== path) window.history.pushState({}, '', path);
+  }
+
+  // Nav handlers used by the UI. While an in-browser proof is running we refuse to navigate
+  // (the proof lives in this tab and dies if we tear the page down).
+  function gotoHome()   { if (secureProvingActive) return; pushPath('/');       showHome(); }
+  function gotoSearch() { if (secureProvingActive) return; pushPath('/search'); showSearch(); }
+  function gotoCreate() { if (secureProvingActive) return; pushPath('/create'); showCreate(); }
+  function gotoAbout()  { if (secureProvingActive) return; pushPath('/about');  showAbout(); }
+  function gotoProfile(username: string) {
+    if (secureProvingActive) return;
+    pushPath('/u/' + encodeURIComponent(username)); showProfile(username);
+  }
+  function openPlay(puzzle: Puzzle) {
+    if (secureProvingActive) return;
+    pushPath('/p/' + puzzle.id); showPlay(puzzle);
+  }
+
+  // Restore the view from the URL: initial page load and browser back/forward.
+  function applyRoute(path: string) {
+    if (path === '/search') showSearch();
+    else if (path === '/create') showCreate();
+    else if (path === '/about') showAbout();
+    else if (path.startsWith('/u/')) showProfile(decodeURIComponent(path.slice(3)));
+    else if (path.startsWith('/p/')) {
+      api.getPuzzle(path.slice(3)).then(showPlay).catch(() => { showHome(); pushPath('/'); });
+    } else showHome();
+  }
+
+  // adopt the path we loaded at (refresh / shared link), then track back/forward
+  useEffect(() => {
+    applyRoute(window.location.pathname);
+    const onPop = () => applyRoute(window.location.pathname);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleCellToggle = useCallback((row: number, col: number, value: number) => {
     setBoard(prev => {
@@ -289,7 +303,7 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <button className="logo-group" onClick={gotoHome} title="Home">
+        <button className="logo-group" onClick={gotoHome} disabled={secureProvingActive} title={secureProvingActive ? 'proof in progress…' : 'Home'}>
           <img className="logo-mark" src="/logo.svg" alt="" />
           <span className="logo-word">lonktris</span>
         </button>
@@ -298,18 +312,24 @@ function App() {
           <button
             className={`stage-tab ${view === 'search' ? 'active' : ''}`}
             onClick={gotoSearch}
+            disabled={secureProvingActive}
+            title={secureProvingActive ? 'proof in progress…' : undefined}
           >
             search
           </button>
           <button
             className={`stage-tab ${view === 'create' ? 'active' : ''}`}
             onClick={gotoCreate}
+            disabled={secureProvingActive}
+            title={secureProvingActive ? 'proof in progress…' : undefined}
           >
             create
           </button>
           <button
             className={`stage-tab ${view === 'about' ? 'active' : ''}`}
             onClick={gotoAbout}
+            disabled={secureProvingActive}
+            title={secureProvingActive ? 'proof in progress…' : undefined}
           >
             about
           </button>
