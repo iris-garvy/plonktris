@@ -81,8 +81,6 @@ impl MonoCircuit{
             .map_err(|e| format!("invalid proof bytes: {e}"))?;
         self.data.verify(proof.clone()).map_err(|e| format!("proof verification failed: {e}"))?;
 
-        // Bind the proof to the claimed puzzle: board / queue / requirements are public inputs,
-        // registered in that order in build(). A valid proof for a *different* puzzle must not pass.
         let pi = &proof.public_inputs;
         for (i, &byte) in board.iter().enumerate() {
             if pi[i] != F::from_canonical_u8(byte) {
