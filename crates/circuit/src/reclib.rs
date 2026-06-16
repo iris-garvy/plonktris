@@ -1,3 +1,4 @@
+
 use plonky2::field::{types::{Field, PrimeField64}, extension::Extendable};
 use plonky2::iop::target::{BoolTarget, Target};
 use plonky2::plonk::circuit_builder::{CircuitBuilder};
@@ -23,7 +24,7 @@ fn spawn(
     next_piece: Target,
     held_piece: Target,
     builder: &mut CircuitBuilder<F, D>, 
-    shape_table: usize
+    tables: Tables
 ) -> PieceStateTargets {
     let zero = builder.zero();
     let one = builder.one();
@@ -41,19 +42,21 @@ fn spawn(
     let fourteen = builder.constant(F::from_canonical_usize(14));
     let thirteen = builder.constant(F::from_canonical_usize(13));
 
-    let piece_shape = get_shape(builder, letter, zero, shape_table);
+    let piece_shape = get_shape(builder, letter, zero, tables.shapes);
     let piece_state = PieceStateTargets{ 
         piece: letter, 
         rotation: zero, 
         shape: piece_shape,
         row: zero,
         col: builder.select(is_one,fourteen, thirteen),
+        row_table: tables.rows,
+        col_table: tables.cols
     };
 
-    let no_collisions = board.no_collision(builder, piece_shape, piece_state.row, piece_state.col).target;
-    // current_null (current piece == 7) is an empty/padding slot — bypass the collision
-    // check; its result is discarded as a no-op in induction_step. (Real play never has
-    // current == 7, so this doesn't affect normal pieces.)
+    let no_collisions = board.no_collision(builder, piece_shape, piece_state.row, piece_state.col, 
+    tables.rows, tables.cols).target;
+
+    //uses sentinel piece as a no op
     let game_okay = builder.select(current_null, one, no_collisions);
     builder.assert_one(game_okay);
 
@@ -67,6 +70,8 @@ struct Tables {
     kicks: usize,
     combo: usize,
     geq: usize,
+    cols: usize,
+    rows: usize
 }
 
 impl Tables {
@@ -76,8 +81,34 @@ impl Tables {
             kicks: construct_kicks(builder),
             combo: construct_combo(builder),
             geq: construct_geq(builder),
+            cols: construct_cols(builder),
+            rows: construct_rows(builder)
         }
     }
+}
+
+fn construct_rows(builder: &mut CircuitBuilder<F, D>) -> usize {
+    let mut input = Vec::new();
+    let mut output = Vec::new();
+    for index in 0..=42 {
+        input.push(index);
+        if index < 10 {output.push(0);}
+        else if index > 30 {output.push(0);}
+        else {output.push(1);}
+    }
+    builder.add_lookup_table_from_table(&input, &output)
+}
+
+fn construct_cols(builder: &mut CircuitBuilder<F, D>) -> usize {
+    let mut input = Vec::new();
+    let mut output = Vec::new();
+    for index in 0..=32 {
+        input.push(index);
+        if index < 10 {output.push(0);}
+        else if index > 19 {output.push(0);}
+        else {output.push(1);}
+    }
+    builder.add_lookup_table_from_table(&input, &output)
 }
 
 fn construct_geq(builder: &mut CircuitBuilder<F, D>) -> usize {
@@ -200,6 +231,8 @@ fn select_piece_state(
         shape: shape,
         row: builder.select(cond, a.row, b.row),
         col: builder.select(cond, a.col, b.col),
+        row_table: a.row_table,
+        col_table: a.col_table
     }
 }
 
@@ -482,13 +515,13 @@ fn induction_step(
     let current_piece = builder.random_access(current_target, step_state.queue.clone());
     let next_piece = builder.random_access(next_target, step_state.queue.clone());
 
-    let piece = spawn(step_state.board, current_piece, next_piece, step_state.held_piece, builder, tables.shapes);
+    let piece = spawn(step_state.board, current_piece, next_piece, step_state.held_piece, builder, tables);
     let mut game_state = GameState::new(builder, step_state.board, piece, next_piece, step_state.held_piece, step_state.ledger);
 
     for action in actions{
         game_state = game_state.apply_movement(builder, *action, tables);
     }
-    game_state = game_state.lock_piece(builder, tables.combo, tables.geq);
+    game_state = game_state.lock_piece(builder, tables);
 
     // padding marker = empty/sentinel piece (7): true no-op — keep board/ledger/held,
     // just advance the index. spawn already forces a valid shape + skips its collision.
@@ -647,7 +680,7 @@ impl GameState {
         let (shifted_piece, shift_ok) = current_piece.shift(builder, board, is_right);
         let (sd_piece,sd_ok) = current_piece.soft_drop(builder, board);
         let (rotated_piece, rotate_ok) = current_piece.rotate(builder, board, is_cw, tables);
-        let (swapped_piece, piece_in_hold) = self.use_hold(builder, tables.shapes);
+        let (swapped_piece, piece_in_hold) = self.use_hold(builder, tables);
 
         let shifted = builder.and(is_shift,shift_ok);
         let didnt_shift = builder.not(shifted);
@@ -676,13 +709,13 @@ impl GameState {
     }
 
 
-    fn lock_piece(&self, builder: &mut CircuitBuilder<F, D>, combo_table: usize, geq_table: usize) -> GameState {
+    fn lock_piece(&self, builder: &mut CircuitBuilder<F, D>, tables: Tables) -> GameState {
         let board = self.board;
         let (adjusted_piece, droppable) = self.current_piece.hard_drop(builder, board);
         let not_droppable = builder.not(droppable);
         let last_action_rotate = builder.and(self.last_action_was_rotation, not_droppable);
         let old_ledger = self.ledger.ledger;
-        let three_corners = adjusted_piece.three_corners(builder, board);
+        let three_corners = adjusted_piece.three_corners(builder, board, tables.rows, tables.cols);
         let is_tspin = builder.and(three_corners, last_action_rotate);
         let twenty_six = builder.constant(F::from_canonical_usize(26));
         let seven = builder.constant(F::from_canonical_usize(7));
@@ -709,12 +742,12 @@ impl GameState {
         attack = builder.mul_add(is_pc.target, ten, attack);
         
         let add_combo = builder.not(is[0]);
-        let combo_attack = builder.add_lookup_from_index(old_ledger[8], combo_table);
+        let combo_attack = builder.add_lookup_from_index(old_ledger[8], tables.combo);
         attack = builder.mul_add(add_combo.target, combo_attack, attack);
 
         let new_combo = builder.mul_add(old_ledger[8], add_combo.target, add_combo.target);
         let combo_index = builder.mul_add(new_combo, twenty_six, old_ledger[6]);
-        let is_max_combo = builder.add_lookup_from_index(combo_index, geq_table);
+        let is_max_combo = builder.add_lookup_from_index(combo_index, tables.geq);
 
         let hold_empty = builder.is_equal(self.held_piece, seven);
         let hold_full = builder.not(hold_empty);
@@ -747,7 +780,7 @@ impl GameState {
 
     fn use_hold(&self, 
         builder: &mut CircuitBuilder<F, D>, 
-        shape_table: usize 
+        tables: Tables,
     ) -> (PieceStateTargets, Target) {
         let zero = builder.zero();
         let one = builder.one();
@@ -762,12 +795,16 @@ impl GameState {
         let spawned_piece = PieceStateTargets{
             piece: target_to_spawn,
             rotation: zero,
-            shape: get_shape(builder, target_to_spawn, zero, shape_table),
+            shape: get_shape(builder, target_to_spawn, zero, tables.shapes),
             row: zero,
             col: builder.select(o_to_spawn, fourteen, thirteen),
+            row_table: tables.rows,
+            col_table: tables.cols
         };
 
-        let game_okay = self.board.no_collision(builder, spawned_piece.shape, zero, spawned_piece.col);
+        let game_okay = self.board.no_collision(builder, spawned_piece.shape, zero, 
+        spawned_piece.col, tables.rows, tables.cols);
+
         builder.assert_one(game_okay.target);
 
         (
@@ -786,43 +823,27 @@ pub struct BoardTargets{
 
 impl BoardTargets{
 
-    fn out_of_bounds(&self, builder: &mut CircuitBuilder<F, D>, row: Target, col: Target) -> BoolTarget {
-        let zero = builder.zero();
-        let eight = builder.constant(F::from_canonical_usize(8));
-        let nine = builder.constant(F::from_canonical_usize(9));
-        let twenty = builder.constant(F::from_canonical_usize(20));
-        let twenty_one = builder.constant(F::from_canonical_usize(21));
-        let twenty_two = builder.constant(F::from_canonical_usize(22));
-        let add_one = builder.add_const(row, F::ONE);
-        let add_two = builder.add_const(row, F::TWO);
-
-        let col_eight = builder.is_equal(col, eight);
-        let col_nine = builder.is_equal(col, nine);
-        let col_twenty = builder.is_equal(col, twenty);
-        let col_twenty_one = builder.is_equal(col, twenty_one);
-
-        let row_neg_one = builder.is_equal(add_one, zero);
-        let row_neg_two = builder.is_equal(add_two, zero);
-        let row_twenty_one = builder.is_equal(row, twenty_one);
-        let row_twenty_two = builder.is_equal(row, twenty_two);
-
-        let bad_col = builder.or(col_eight, col_nine);
-        let bad_col = builder.or(bad_col, col_twenty);
-        let bad_col = builder.or(bad_col, col_twenty_one);
-
-        let bad_row = builder.or(row_neg_one, row_neg_two);
-        let bad_row = builder.or(bad_row, row_twenty_one);
-        let bad_row = builder.or(bad_row, row_twenty_two);
-
-        builder.or(bad_col, bad_row)
+    fn in_bounds(&self, 
+        builder: &mut CircuitBuilder<F, D>, 
+        row: Target, col: Target, 
+        row_table: usize, col_table: usize
+    ) -> BoolTarget {
+        let col_safe = builder.add_lookup_from_index(col, col_table);
+        let row_index = builder.add_const(row, F::from_canonical_usize(10));
+        let row_safe = builder.add_lookup_from_index(row_index, row_table);
+        builder.and(BoolTarget::new_unsafe(col_safe),BoolTarget::new_unsafe(row_safe))
     }
 
-    fn block_collision(&self, builder: &mut CircuitBuilder<F, D>, row: Target, col: Target) -> BoolTarget {
+    fn block_collision(&self, 
+        builder: &mut CircuitBuilder<F, D>, 
+        row: Target, col: Target,
+        row_table: usize, col_table: usize
+    ) -> BoolTarget {
         let cells = self.cells;
         let ten = builder.constant(F::from_canonical_usize(10));
 
-        let not_bounded = self.out_of_bounds(builder, row, col);
-        let bounded = builder.not(not_bounded);
+        let bounded = self.in_bounds(builder, row, col, row_table, col_table);
+        let not_bounded = builder.not(bounded);
         let safe_row = builder.mul(row, bounded.target);
 
         let row_value = builder.random_access(safe_row, cells.to_vec());
@@ -835,14 +856,19 @@ impl BoardTargets{
         builder.or(BoolTarget::new_unsafe(collision), not_bounded)
     }
 
-    fn no_collision(&self, builder:&mut CircuitBuilder<F, D>, shape: [[Target;2];4], row: Target, col: Target) -> BoolTarget {
+    fn no_collision(&self, 
+        builder:&mut CircuitBuilder<F, D>, 
+        shape: [[Target;2];4], 
+        row: Target, col: Target,
+        row_table: usize, col_table: usize
+    ) -> BoolTarget {
         let mut any_collision = builder._false();
 
         for block in 0..4 {
             let piece_row = builder.add(row,shape[block][1]); // these are flipped because 
             let piece_col = builder.add(col,shape[block][0]); // in the table they're x and y
 
-            let collision = self.block_collision(builder, piece_row, piece_col);
+            let collision = self.block_collision(builder, piece_row, piece_col, row_table, col_table);
             any_collision = builder.or(any_collision, collision);
         }
         builder.not(any_collision)
@@ -1007,6 +1033,8 @@ struct PieceStateTargets{
     shape: [[Target;2];4],
     row: Target,
     col: Target,
+    row_table: usize,
+    col_table: usize
 }
 
 impl PieceStateTargets{
@@ -1014,13 +1042,13 @@ impl PieceStateTargets{
         &self, 
         builder: &mut CircuitBuilder<F, D>, 
         board: BoardTargets, 
-        is_right: BoolTarget
+        is_right: BoolTarget,
     ) -> (PieceStateTargets, BoolTarget) {
         let is_left = builder.not(is_right);
         let mut new_col = builder.add(self.col, is_right.target);
         new_col = builder.sub(new_col, is_left.target);
         let shape = self.shape;
-        let shiftable = board.no_collision(builder, shape, self.row, new_col);
+        let shiftable = board.no_collision(builder, shape, self.row, new_col, self.row_table, self.col_table);
 
         (PieceStateTargets { 
             piece: self.piece, 
@@ -1028,6 +1056,8 @@ impl PieceStateTargets{
             shape: shape,
             row: self.row, 
             col: builder.select(shiftable, new_col, self.col),
+            row_table: self.row_table,
+            col_table: self.col_table
         },
         shiftable)
     }
@@ -1036,7 +1066,7 @@ impl PieceStateTargets{
         let one = builder.constant(F::from_canonical_usize(1));
         let new_row = builder.add(self.row, one);
         let shape = self.shape;
-        let shiftable = board.no_collision(builder, shape, new_row, self.col);
+        let shiftable = board.no_collision(builder, shape, new_row, self.col, self.row_table, self.col_table);
 
         (
             PieceStateTargets { 
@@ -1045,6 +1075,8 @@ impl PieceStateTargets{
                 shape: shape,
                 row: builder.add(self.row, shiftable.target),
                 col: self.col,
+                row_table: self.row_table,
+                col_table: self.col_table
             },
             shiftable
         )
@@ -1120,7 +1152,7 @@ impl PieceStateTargets{
             let try_col = builder.add(self.col, not_o_dx);
             
 
-            let works = board.no_collision(builder, shape_coord, try_row, try_col);
+            let works = board.no_collision(builder, shape_coord, try_row, try_col, self.row_table, self.col_table);
             let not_found = builder.not(found);
             let update_pos = builder.and(works, not_found);
 
@@ -1137,12 +1169,17 @@ impl PieceStateTargets{
                 shape: shape_coord, 
                 row: final_row, 
                 col: final_col,
+                row_table: self.row_table,
+                col_table: self.col_table,
             }, 
             found
         )
     }
 
-    fn three_corners(&self, builder:&mut CircuitBuilder<F, D>, board: BoardTargets) -> BoolTarget {
+    fn three_corners(&self, builder:&mut CircuitBuilder<F, D>, 
+        board: BoardTargets, 
+        row_table: usize, col_table: usize
+    ) -> BoolTarget {
         let mut num_collisions = builder.zero();
         let row = self.row;
         let col = self.col;
@@ -1157,7 +1194,7 @@ impl PieceStateTargets{
             let piece_row = builder.add(row,shape[block][1]);
             let piece_col = builder.add(col,shape[block][0]);
 
-            let collision = board.block_collision(builder, piece_row, piece_col);
+            let collision = board.block_collision(builder, piece_row, piece_col, row_table, col_table);
 
             num_collisions = builder.add(num_collisions, collision.target);
         }
