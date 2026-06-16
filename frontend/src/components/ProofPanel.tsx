@@ -10,9 +10,7 @@ interface ProofPanelProps {
   proof: unknown;
   onProve: (secure: boolean) => void;
   disabled: boolean;
-  /** user enabled the secure-proving option → show the secure button */
   allowSecure: boolean;
-  /** server fast-proving limit hit → fast button locked, secure forced */
   rateLimited: boolean;
 }
 

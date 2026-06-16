@@ -135,6 +135,29 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     warnTimerRef.current = setTimeout(() => setOverflowWarn(false), 3000);
   }
 
+  // restart the whole solve: restore the puzzle's initial board + full queue, exactly
+  // as it was when this puzzle first loaded (mirrors the initial useState values).
+  function restartSolve() {
+    das.stopAll();
+    setPlayBoard(initialBoard.map(r => [...r]));
+    setConsumedIdx(1);
+    setCurrentPiece(queue[0] ?? null);
+    setHeld(null);
+    setRotation(0);
+    setPieceRow(0);
+    setPieceCol(spawnCol(queue[0]));
+    setCurrentActions([]);
+    setPlacedMoves([]);
+    setDone(false);
+    setLedger(emptyLedger());
+    setOverflowWarn(false);
+    turnStartRef.current = { piece: queue[0] ?? null, held: null, consumedIdx: 1, baseActions: [] };
+    historyRef.current = [];
+    lastRotateRef.current = false;
+    if (warnTimerRef.current) clearTimeout(warnTimerRef.current);
+    onComplete(null); // any completed solve is now void
+  }
+
   function doPlace(board: Board, piece: number, rot: number, row: number, col: number, actions: Action[], consumed: number, soFar: SecretMoves) {
     const landRow = hardDrop(board, piece, rot, row, col);
     if (!isValidPlacement(board, piece, rot, landRow, col)) return;
@@ -299,8 +322,9 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
 
     if (e.repeat) return;
 
-    // undo works even after the last piece locks
+    // undo and clear-board work even after the last piece locks
     if (k === keys.undo) { e.preventDefault(); undoTurn(); return; }
+    if (k === keys.clearBoard) { e.preventDefault(); restartSolve(); return; }
 
     if (done || currentPiece == null) return;
 
