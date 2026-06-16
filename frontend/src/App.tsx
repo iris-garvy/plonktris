@@ -487,13 +487,13 @@ function App() {
                     />
                     {secretMoves && !reqsDone && (
                       <div className="solve-hint">
-                        conditions not met — undo and try again
+                        conditions not met! try again!
                       </div>
                     )}
                     {secretMoves && reqsDone && !user && (
                       <div className="solve-hint">
                         {view === 'play'
-                          ? 'anonymous — log in to record your solve'
+                          ? 'log in to record your solve'
                           : 'log in to publish your puzzle'}
                       </div>
                     )}

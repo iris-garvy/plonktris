@@ -180,7 +180,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
     const linesCleared = tmp.filter(r => r.every(c => c !== EMPTY)).length;
     const wasSpin = lastRotateRef.current && landRow === row;
     const heldOccupied = held != null;
-    setLedger(prev => lockLedger(prev, {
+    const newLedger = lockLedger(ledger, {
       boardBefore: board,
       boardCleared: newBoard,
       linesCleared,
@@ -189,7 +189,8 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
       col,
       lastActionRotate: wasSpin,
       heldOccupied,
-    }));
+    });
+    setLedger(newLedger);
     lastRotateRef.current = false;
 
     const padded = [...actions];
@@ -201,6 +202,10 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
       setPlacedMoves(newPlaced);
       setCurrentPiece(null);
       setDone(true);
+      // Push the final ledger to the parent in the SAME batch as onComplete so reqsDone is
+      // already current when secretMoves appears. Otherwise the ledger lags one render (it
+      // propagates via the onLedger effect) and "conditions not met" flashes for a frame.
+      onLedger?.(newLedger);
       onComplete(newPlaced);
       return;
     }
