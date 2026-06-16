@@ -38,12 +38,13 @@ interface GameBoardProps {
   onLedger?: (ledger: Ledger) => void;
   reqText: string | null;
   reqsDone: boolean;
+  noHold: boolean;
   keys: Bindings;
   handling: Handling;
   sidePanel?: ReactNode;
 }
 
-export default function GameBoard({ initialBoard, queue, onComplete, onQueueView, onLedger, reqText, reqsDone, keys, handling, sidePanel }: GameBoardProps) {
+export default function GameBoard({ initialBoard, queue, onComplete, onQueueView, onLedger, reqText, reqsDone, noHold, keys, handling, sidePanel }: GameBoardProps) {
   const [playBoard, setPlayBoard]       = useState<Board>(() => initialBoard.map(r => [...r]));
   const [consumedIdx, setConsumedIdx]   = useState(1);
   const [currentPiece, setCurrentPiece] = useState<number | null>(queue[0] ?? null);
@@ -265,6 +266,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
   }
 
   function doHold() {
+    if (noHold) return; // hold is disabled when "no hold" is a requirement
     const startHeldEmpty = turnStartRef.current.held == null;
     const n = currentActions.filter(a => a === ACTION_HOLD).length + 1;
     const canonical = startHeldEmpty ? ((n - 1) % 2) + 1 : n % 2;
@@ -328,7 +330,7 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
       {/* board: hold | (spacer + grid)  (same structure as TetrisBoard) */}
       <div className="board-layout">
         <div className="board-side-panel left">
-          <div className="hold-box">
+          <div className={`hold-box${noHold ? ' disabled' : ''}`} title={noHold ? 'hold disabled (no hold required)' : undefined}>
             <PieceMini pieceId={held} size={12} />
           </div>
           {overflowWarn && (

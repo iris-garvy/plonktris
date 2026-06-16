@@ -450,6 +450,7 @@ function App() {
                 onLedger={setLedger}
                 reqText={reqSummary}
                 reqsDone={reqsDone}
+                noHold={!!activeReqs?.[7]}
                 keys={keys}
                 handling={handling}
                 sidePanel={

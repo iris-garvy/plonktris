@@ -144,6 +144,17 @@
   box-sizing: border-box;
 }
 
+.hold-box.disabled {
+  opacity: 0.35;
+  position: relative;
+}
+.hold-box.disabled::after {
+  content: '\2715'; /* ✕ */
+  position: absolute;
+  font-size: 22px;
+  color: var(--text-muted);
+}
+
 .tetris-grid {
   display: grid;
   grid-template-columns: repeat(10, 26px);
