@@ -122,22 +122,6 @@ html, body {
   color: var(--text-muted);
   letter-spacing: 0.04em;
 }
-.share-link-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  font-family: inherit;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  padding: 2px 8px;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-.share-link-btn:hover { color: var(--text); border-color: var(--lavender); }
-.share-link-btn .glyph-icon { width: 12px; height: 12px; }
 
 .login-btn {
   margin-left: 8px;
