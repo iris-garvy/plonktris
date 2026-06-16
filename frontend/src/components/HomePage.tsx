@@ -109,7 +109,7 @@ export default function HomePage({ onPlay, onCreator }: HomePageProps) {
 
       <div className="home-main">
         {empty && (
-          <div className="browse-status">no puzzles yet — be the first to publish one!</div>
+          <div className="browse-status">no puzzles quite yet...</div>
         )}
         <Rail title="FEATURED" puzzles={data.featured} onPlay={onPlay} onCreator={onCreator} />
         <Rail
@@ -119,9 +119,9 @@ export default function HomePage({ onPlay, onCreator }: HomePageProps) {
           onPlay={onPlay}
           onCreator={onCreator}
         />
-        <Rail title="T-SPIN puzzles" puzzles={data.tspin} onPlay={onPlay} onCreator={onCreator} />
-        <Rail title="PC puzzles" puzzles={data.pc} onPlay={onPlay} onCreator={onCreator} />
-        <Rail title="ATTACK puzzles" puzzles={data.attack} onPlay={onPlay} onCreator={onCreator} />
+        <Rail title="T-SPIN PUZZLES" puzzles={data.tspin} onPlay={onPlay} onCreator={onCreator} />
+        <Rail title="PC PUZZLES" puzzles={data.pc} onPlay={onPlay} onCreator={onCreator} />
+        <Rail title="ATTACK PUZZLES" puzzles={data.attack} onPlay={onPlay} onCreator={onCreator} />
 
         <section className="home-rail">
           <div className="home-rail-head">
