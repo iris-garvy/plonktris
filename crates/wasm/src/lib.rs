@@ -1,8 +1,3 @@
-use plonky2::field::types::{Field};
-use plonky2::iop::witness::{PartialWitness, WitnessWrite};
-use plonky2::plonk::circuit_builder::{CircuitBuilder};
-use plonky2::field::goldilocks_field::GoldilocksField;
-use plonky2::plonk::circuit_data::{CircuitConfig};
 use wasm_bindgen::prelude::*;
 use circuit::*;
 use circuit::reclib;
@@ -29,6 +24,20 @@ fn rec_circuits(padded_len: usize) -> Rc<(reclib::StepCircuit, reclib::AggCircui
             let agg = reclib::build_aggregator_padded(&step, padded_len, REC_AGG_PAD);
             Rc::new((step, agg))
         }).clone()
+    })
+}
+
+thread_local! {
+    // built monolithic circuits cached per piece count. Only helps multi-prove sessions
+    // (a refresh drops the wasm module and the cache with it), but free within a session.
+    static MONO_CACHE: RefCell<HashMap<usize, Rc<MonoCircuit>>> = RefCell::new(HashMap::new());
+}
+
+fn mono_circuit(num_pieces: usize) -> Rc<MonoCircuit> {
+    MONO_CACHE.with(|c| {
+        c.borrow_mut().entry(num_pieces)
+            .or_insert_with(|| Rc::new(MonoCircuit::build(num_pieces)))
+            .clone()
     })
 }
 
@@ -60,56 +69,10 @@ pub fn prove_requirements(
     requirements: &[u8],
     secret_moves: &[u8]
 ) -> Result<Vec<u8>, JsValue> {
-    let zero = GoldilocksField::ZERO;
-    let one = GoldilocksField::ONE;
-
-    let config = CircuitConfig::standard_recursion_config();
-    let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
-
-    let num_pieces = queue.len();
-    let bits_t = deserialize_board(&mut builder);
-    let board_t =bits_to_board(&mut builder, bits_t)
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let queue_t = deserialize_queue(&mut builder, num_pieces + 1);
-    let requirements_t = deserialize_requirements(&mut builder);
-    let actions_t = deserialize_actions(&mut builder, num_pieces);
-
-
-    let mut pw = PartialWitness::new();
-    for (i, &byte) in board.iter().enumerate() {
-        if byte == 1 {
-            pw.set_target(bits_t[i], one).map_err(|e| JsValue::from_str(&e.to_string()))?;
-        } else {
-            pw.set_target(bits_t[i], zero).map_err(|e| JsValue::from_str(&e.to_string()))?;
-        }
-    }
-
-    for (i, &piece) in queue.iter().enumerate() {
-        pw.set_target(queue_t[i], GoldilocksField::from_canonical_u8(piece))
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    }
-    pw.set_target(queue_t[num_pieces], GoldilocksField::from_canonical_usize(7))
-    .map_err(|e| JsValue::from_str(&e.to_string()))?;
-
-    for piece in 0..num_pieces {
-        for act in 0..32 {
-            let index = piece * 32 + act;
-            pw.set_target(actions_t[piece][act], GoldilocksField::from_canonical_u8(secret_moves[index]))
-            .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        }
-    }
-    for (i, &req) in requirements.iter().enumerate() {
-        pw.set_target(requirements_t[i], GoldilocksField::from_canonical_u8(req))
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    }
-
-    let ledger = simulate(&mut builder, board_t, &queue_t, &actions_t);
-    verify_requirements(&mut builder, requirements_t, ledger);
-
-    let data = builder.build::<plonky2::plonk::config::PoseidonGoldilocksConfig>();
-    let proof = data.prove(pw)
-    .map_err(|e| JsValue::from_str(&format!("prove failed: {e:#?}")))?;
-
+    let circuit = mono_circuit(queue.len());
+    let proof = circuit
+        .prove(&board.to_vec(), &queue.to_vec(), &requirements.to_vec(), &secret_moves.to_vec())
+        .map_err(|e| JsValue::from_str(&e))?;
     Ok(proof.to_bytes())
 }
 

@@ -2,9 +2,10 @@ use plonky2::field::types::{Field};
 use plonky2::iop::target::{BoolTarget, Target};
 use plonky2::plonk::circuit_builder::{CircuitBuilder};
 use plonky2::field::goldilocks_field::GoldilocksField;
-use plonky2::plonk::circuit_data::CircuitConfig;
+use plonky2::plonk::circuit_data::{CircuitConfig, CircuitData};
 use plonky2::iop::witness::{PartialWitness, WitnessWrite};
 use plonky2::plonk::config::PoseidonGoldilocksConfig;
+use plonky2::plonk::proof::ProofWithPublicInputs;
 
 //recursive circuit for big boys
 pub mod reclib;
@@ -13,47 +14,95 @@ type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
-pub fn generate_proof(board: &Vec<u8>, queue: &Vec<u8>, requirements: &Vec<u8>, secret_moves: &Vec<u8>) -> Result<Vec<u8>,String> {
-    let config = CircuitConfig::standard_recursion_config();
-    let mut builder = CircuitBuilder::<F, D>::new(config);
 
-    let num_pieces = queue.len();
-    let bits_t = deserialize_board(&mut builder);
-    let board_t = bits_to_board(&mut builder, bits_t).unwrap();
-    let queue_t = deserialize_queue(&mut builder, num_pieces + 1); //for hold sentinel
-    let req_t = deserialize_requirements(&mut builder);
-    let actions_t = deserialize_actions(&mut builder, num_pieces);
+pub struct MonoCircuit {
+    pub data: CircuitData<F, C, D>,
+    bits_t: [Target; 210],
+    queue_t: Vec<Target>,
+    req_t: [Target; 8],
+    actions_t: Vec<[Target; 32]>
+}
 
-    let mut pw = PartialWitness::new();
+impl MonoCircuit{
+    pub fn build(num_pieces: usize) -> Self {
+        let config = CircuitConfig::standard_recursion_config();
+        let mut builder = CircuitBuilder::<F, D>::new(config);
 
-    for (i, &byte) in board.iter().enumerate() {
-        pw.set_target(bits_t[i], F::from_canonical_u8(byte)).unwrap();
-    }
+        let bits_t = deserialize_board(&mut builder);
+        let board_t = bits_to_board(&mut builder, bits_t).unwrap();
+        let queue_t = deserialize_queue(&mut builder, num_pieces + 1); //for hold sentinel
+        let req_t = deserialize_requirements(&mut builder);
+        let actions_t = deserialize_actions(&mut builder, num_pieces);
 
-    for (i, &piece) in queue.iter().enumerate() {
-        pw.set_target(queue_t[i], F::from_canonical_u8(piece)).unwrap();
-    }
-    pw.set_target(queue_t[num_pieces],F::from_canonical_usize(7)).unwrap();
+        let ledger = simulate(&mut builder, board_t, &queue_t, &actions_t);
+        verify_requirements(&mut builder, req_t, ledger);
 
-    for (i, &req) in requirements.iter().enumerate() {
-        pw.set_target(req_t[i], F::from_canonical_u8(req)).unwrap();
-    }
-
-    for piece in 0..num_pieces {
-        for act in 0..32 {
-            let index = piece * 32 + act;
-            pw.set_target(actions_t[piece][act], F::from_canonical_u8(secret_moves[index])).unwrap();
+        let data = builder.build::<C>();
+        Self {
+            data: data,
+            bits_t: bits_t,
+            queue_t: queue_t,
+            req_t: req_t,
+            actions_t: actions_t
         }
     }
+    
+    
+    pub fn prove(&self, board: &Vec<u8>, queue: &Vec<u8>, requirements: &Vec<u8>, secret_moves: &Vec<u8>) -> Result<ProofWithPublicInputs<F,C,D>, String> {
+        let num_pieces = queue.len();
+        let mut pw = PartialWitness::new();
 
-    let ledger = simulate(&mut builder, board_t, &queue_t, &actions_t);
-    verify_requirements(&mut builder, req_t, ledger);
+        for (i, &byte) in board.iter().enumerate() {
+            pw.set_target(self.bits_t[i], F::from_canonical_u8(byte)).unwrap();
+        }
 
-    let data = builder.build::<C>();
-    let proof = data.prove(pw).map_err(|e| e.to_string())?;
-    let proof_bytes = proof.to_bytes();
-    eprintln!("num public inputs: {}", data.common.num_public_inputs);
-    Ok(proof_bytes)
+        for (i, &piece) in queue.iter().enumerate() {
+            pw.set_target(self.queue_t[i], F::from_canonical_u8(piece)).unwrap();
+        }
+        pw.set_target(self.queue_t[num_pieces],F::from_canonical_usize(7)).unwrap();
+
+        for (i, &req) in requirements.iter().enumerate() {
+            pw.set_target(self.req_t[i], F::from_canonical_u8(req)).unwrap();
+        }
+
+        for piece in 0..num_pieces {
+            for act in 0..32 {
+                let index = piece * 32 + act;
+                pw.set_target(self.actions_t[piece][act], F::from_canonical_u8(secret_moves[index])).unwrap();
+            }
+        }
+
+        let proof = self.data.prove(pw).map_err(|e| e.to_string())?;
+        Ok(proof)
+    }
+
+    pub fn verify_bytes(&self, proof_bytes: &[u8], board: &[u8], queue: &[u8], requirements: &[u8]) -> Result<(), String> {
+        let proof = ProofWithPublicInputs::<F, C, D>::from_bytes(proof_bytes.to_vec(), &self.data.common)
+            .map_err(|e| format!("invalid proof bytes: {e}"))?;
+        self.data.verify(proof.clone()).map_err(|e| format!("proof verification failed: {e}"))?;
+
+        // Bind the proof to the claimed puzzle: board / queue / requirements are public inputs,
+        // registered in that order in build(). A valid proof for a *different* puzzle must not pass.
+        let pi = &proof.public_inputs;
+        for (i, &byte) in board.iter().enumerate() {
+            if pi[i] != F::from_canonical_u8(byte) {
+                return Err("board doesn't match puzzle".to_string());
+            }
+        }
+        let queue_off = 210;
+        for (i, &piece) in queue.iter().enumerate() {
+            if pi[queue_off + i] != F::from_canonical_u8(piece) {
+                return Err("queue doesn't match puzzle".to_string());
+            }
+        }
+        let req_off = 210 + queue.len() + 1; // +1 for the hold sentinel slot in the queue
+        for (i, &req) in requirements.iter().enumerate() {
+            if pi[req_off + i] != F::from_canonical_u8(req) {
+                return Err("requirements don't match puzzle".to_string());
+            }
+        }
+        Ok(())
+    }
 }
 
 pub fn deserialize_requirements(builder: &mut CircuitBuilder<F, D>) -> [Target; 8] {
@@ -108,13 +157,10 @@ pub fn deserialize_queue(builder: &mut CircuitBuilder<F, D>, queue_length: usize
     queue_targets
 }
 
-pub fn deserialize_actions(builder: &mut CircuitBuilder<F, D>, queue_length: usize) -> Vec<Vec<Target>>{
+pub fn deserialize_actions(builder: &mut CircuitBuilder<F, D>, queue_length: usize) -> Vec<[Target; 32]>{
     let mut action_targets = Vec::new();
     for piece in 0..queue_length{
-        action_targets.push(Vec::new());
-        for _ in 0..32 {
-            action_targets[piece].push(builder.add_virtual_target());
-        }
+        action_targets.push(builder.add_virtual_target_arr());
     }
     action_targets
 }
@@ -123,7 +169,7 @@ pub fn simulate(
     builder: &mut CircuitBuilder<F, D>, 
     board: BoardTargets, 
     queue: &Vec<Target>, 
-    actions: &Vec<Vec<Target>>
+    actions: &Vec<[Target; 32]>
 ) -> LedgerTargets {
     let mut queue_index = 0;
     let mut board = board;

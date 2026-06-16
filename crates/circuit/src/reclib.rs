@@ -471,7 +471,6 @@ pub fn build_aggregator_padded(step: &StepCircuit, num_pieces: usize, pad_to: us
 pub struct StepCircuit {
     data: CircuitData<F, C, D>,
     in_state: StepState,   
-    out_state: StepState,
     actions: Vec<Target>,
 }
 
@@ -494,7 +493,7 @@ impl StepCircuit {
         assert_states_eq(&mut b, &state, &out_state);  // out == computed (index already +chunk)
 
         let data = b.build::<C>();
-        Self { data, in_state, out_state, actions }
+        Self { data, in_state, actions }
     }
 }
 
@@ -1211,12 +1210,6 @@ impl PieceStateTargets{
 #[derive(Debug, Clone, Copy)]
 pub struct LedgerTargets{
     ledger: [Target; 10], //tss, tsd, tst, tetris, pc, attack, max_combo, held, combo, b2b
-}
-
-impl LedgerTargets{
-    fn empty(builder: &mut CircuitBuilder<F, D>) -> Self{
-        LedgerTargets{ ledger: [builder.zero(); 10] }
-    }
 }
 
 #[cfg(test)]

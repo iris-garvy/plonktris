@@ -17,8 +17,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY --from=builder /app/target/release/plonktris-server /usr/local/bin/plonktris-server
-# server reads verifier_data/ by relative path at startup
-COPY --from=builder /app/verifier_data ./verifier_data
 
 EXPOSE 3000
 CMD ["plonktris-server"]

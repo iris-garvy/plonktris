@@ -5,11 +5,8 @@ use std::collections::HashMap;
 use std::time::{Instant, Duration};
 use std::net::SocketAddr;
 use sqlx::PgPool;
-use plonky2::{field::goldilocks_field::GoldilocksField, util::serialization::DefaultGateSerializer};
-use plonky2::plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs};
-use plonky2::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData, VerifierCircuitData};
 use tokio::sync::Notify;
-use circuit::generate_proof;
+use circuit::MonoCircuit;
 use circuit::reclib;
 use tower_http::cors::{CorsLayer, AllowOrigin, Any};
 use argon2::{password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},Argon2};
@@ -34,15 +31,19 @@ const RECURSIVE_AGG_PAD: usize = 1 << 13;
 
 type RecursiveCircuits = (reclib::StepCircuit, reclib::AggCircuit);
 type RecursiveCache = Mutex<HashMap<usize, Arc<RecursiveCircuits>>>;
+// lazily-built monolithic circuits, keyed by num_pieces. Prover and verifier come
+// from the SAME built circuit (no on-disk verifier_data), so they can never drift.
+type MonolithicCache = Mutex<HashMap<usize, Arc<MonoCircuit>>>;
 
 struct AppState {
     db: PgPool,
-    verifiers: Arc<Vec<VerifierData>>,
     new_job: Notify,
     // per-IP registration timestamps, for throttling account creation
     reg_attempts: Mutex<HashMap<String, Vec<Instant>>>,
     // lazily-built recursive circuits, keyed by padded length
     recursive: RecursiveCache,
+    // lazily-built monolithic circuits, keyed by num_pieces
+    monolithic: MonolithicCache,
 }
 
 #[tokio::main]
@@ -63,11 +64,9 @@ async fn main() {
         .unwrap_or(0);
     if reclaimed > 0 { println!("reclaimed {reclaimed} orphaned proving job(s)"); }
 
-    println!("loading verifiers...");
-    let verifiers = Arc::new(load_verifiers());
     println!("ready!");
 
-    let state = Arc::new(AppState { db: db, verifiers: verifiers, new_job: Notify::new(), reg_attempts: Mutex::new(HashMap::new()), recursive: Mutex::new(HashMap::new()) });
+    let state = Arc::new(AppState { db: db, new_job: Notify::new(), reg_attempts: Mutex::new(HashMap::new()), recursive: Mutex::new(HashMap::new()), monolithic: Mutex::new(HashMap::new()) });
     let worker_state = state.clone();
 
     tokio::spawn(async move {
@@ -285,7 +284,8 @@ async fn process_next_job(worker_state: &Arc<AppState>) -> Result<bool, String> 
             let result = if num_pieces > MONOLITHIC_MAX_PIECES {
                 prove_recursive(&thread_state.recursive, &board, &queue, &secret_moves)
             } else {
-                generate_proof(&board, &queue, &requirements, &secret_moves)
+                let circuit = get_or_build_monolithic(&thread_state.monolithic, num_pieces);
+                circuit.prove(&board, &queue, &requirements, &secret_moves).map(|p| p.to_bytes())
             };
             let _ = tx.send(result);
         });
@@ -392,19 +392,20 @@ fn verify_proof(state: &AppState, proof: &[u8], board: &[u8], queue: &[u8], requ
         return verify_recursive(&state.recursive, proof, board, queue, requirements);
     }
 
-    let (verifier_only, common) = &state.verifiers[num_pieces - 1];
-    let verifier = VerifierCircuitData {
-        verifier_only: verifier_only.clone(),
-        common: common.clone(),
-    };
+    // Build (or reuse) the monolithic circuit for this length and verify against it.
+    // verify_bytes deserializes against the freshly-built common data and binds the
+    // proof's public inputs to the submitted board/queue/requirements.
+    let circuit = get_or_build_monolithic(&state.monolithic, num_pieces);
+    circuit.verify_bytes(proof, board, queue, requirements)
+}
 
-    let parsed = ProofWithPublicInputs::<GoldilocksField, PoseidonGoldilocksConfig, 2>::from_bytes(
-        proof.to_vec(),
-        common
-    ).map_err(|e| format!("invalid proof bytes: {e}"))?;
-
-    verifier.verify(parsed)
-    .map_err(|e| format!("proof verification failed: {e}"))
+// Lazily build (and cache) the monolithic circuit for a given piece count. Mirrors
+// get_or_build_recursive: prover and verifier both come from this single built circuit.
+fn get_or_build_monolithic(cache: &MonolithicCache, num_pieces: usize) -> Arc<MonoCircuit> {
+    let mut map = cache.lock().unwrap();
+    map.entry(num_pieces)
+        .or_insert_with(|| Arc::new(MonoCircuit::build(num_pieces)))
+        .clone()
 }
 
 // Lazily build (and cache) the recursive circuits for a given padded length.
@@ -1099,22 +1100,6 @@ async fn get_user_profile(
     }))
 }
 
-type VerifierData = (VerifierOnlyCircuitData<PoseidonGoldilocksConfig,2>, CommonCircuitData<GoldilocksField,2>);
-
-
-fn load_verifiers() -> Vec<VerifierData> {
-    let gate_serializer = DefaultGateSerializer;
-    let mut verifiers = Vec::new();
-    for num_pieces in 1..=21 {
-        let verifier_bytes = std::fs::read(format!("verifier_data/verifier_{}.bin", num_pieces)).unwrap();
-        let common_bytes = std::fs::read(format!("verifier_data/common_{}.bin", num_pieces)).unwrap();
-        let verifier_only = VerifierOnlyCircuitData::from_bytes(verifier_bytes).unwrap();
-        let common = CommonCircuitData::from_bytes(common_bytes, &gate_serializer).unwrap();
-        verifiers.push((verifier_only, common));
-    }
-    verifiers
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1145,5 +1130,42 @@ mod tests {
         // soundness: a different queue must be rejected by the binding
         let wrong: Vec<u8> = (0..11).map(|i| ((i + 1) % 7) as u8).collect();
         assert!(verify_recursive(&cache, &proof, &board, &wrong, &requirements).is_err());
+    }
+
+    // End-to-end monolithic path exactly as the server runs it: get_or_build_monolithic ->
+    // prove -> proof bytes -> verify (via a FRESH cache, i.e. a separately built circuit).
+    // This is the 6-piece case that produced "invalid proof bytes: io error" when the verifier
+    // loaded a stale on-disk snapshot; a fresh-cache verify proves prover/verifier no longer drift.
+    #[test]
+    fn monolithic_server_roundtrip() {
+        let n = 6usize;
+        let board = vec![0u8; 210];
+        let queue: Vec<u8> = (0..n as u8).map(|i| i % 7).collect();
+        let requirements = vec![0u8; 8];
+
+        // spread pieces across columns (1=RIGHT, 6=NOOP) so they don't spawn-collide
+        let mut actions = Vec::with_capacity(n * 32);
+        for k in 0..n as u8 {
+            for a in 0..32u8 {
+                actions.push(if a < (k % 8) { 1u8 } else { 6u8 });
+            }
+        }
+
+        let prove_cache: MonolithicCache = Mutex::new(HashMap::new());
+        let proof = get_or_build_monolithic(&prove_cache, n)
+            .prove(&board, &queue, &requirements, &actions)
+            .expect("prove failed")
+            .to_bytes();
+
+        // verify against a SEPARATELY built circuit — the exact drift that caused the io error
+        let verify_cache: MonolithicCache = Mutex::new(HashMap::new());
+        get_or_build_monolithic(&verify_cache, n)
+            .verify_bytes(&proof, &board, &queue, &requirements)
+            .expect("verify failed");
+
+        // soundness: a different queue must be rejected by the binding
+        let wrong: Vec<u8> = (0..n as u8).map(|i| (i + 1) % 7).collect();
+        assert!(get_or_build_monolithic(&verify_cache, n)
+            .verify_bytes(&proof, &board, &wrong, &requirements).is_err());
     }
 }
