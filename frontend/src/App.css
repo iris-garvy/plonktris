@@ -111,6 +111,10 @@ html, body {
   gap: 6px;
 }
 
+/* keep the button's layout footprint but make it invisible + inert (vs display:none, which
+   would collapse the space and shift the header when switching views) */
+.stage-tabs .inactive { visibility: hidden; pointer-events: none; }
+
 .play-board-title {
   display: flex;
   align-items: baseline;
@@ -394,6 +398,9 @@ html, body {
   .view-tabs  { margin-left: 0; }
   .stage-tabs { margin-left: 0; }                            /* don't force it to its own row */
   .play-board-title { display: none; }                       /* puzzle name omitted on small headers */
+  /* prove is never usable on mobile, but keep its space reserved (visibility, not display)
+     so the stacked header doesn't shift when switching create <-> about */
+  .stage-tabs .create-stage { visibility: hidden; pointer-events: none; }
 }
 
 .mobile-queue-strip { display: none; }

@@ -351,26 +351,29 @@ function App() {
         )}
 
         <div className="stage-tabs">
-          {view === 'create' && (
-            stage === 'edit' ? (
-              <button
-                className="stage-tab create-stage"
-                onClick={handleStartSolving}
-                disabled={queue.length === 0}
-              >
-                <GlassIcon className="btn-icon" />prove
-              </button>
-            ) : (
-              <button className="stage-tab create-stage" onClick={handleBackToEdit}>
-                <ArrowLeft className="glyph-icon glyph-lead" />edit
-              </button>
-            )
-          )}
-          {(view === 'play' || view === 'create') && (
-            <button className="keys-open-btn" onClick={() => setShowKeysModal(true)} title="Keybindings">
-              <GearIcon className="btn-icon" />
-            </button>
-          )}
+          {/* prove/edit and keybindings are always rendered (just made inert + invisible when
+              they don't apply) so the header keeps a constant footprint and doesn't shift when
+              switching views — e.g. create <-> about. */}
+          <button
+            className={`stage-tab create-stage${view === 'create' ? '' : ' inactive'}`}
+            onClick={view !== 'create' ? undefined : (stage === 'edit' ? handleStartSolving : handleBackToEdit)}
+            disabled={view === 'create' && stage === 'edit' && queue.length === 0}
+            tabIndex={view === 'create' ? 0 : -1}
+            aria-hidden={view !== 'create'}
+          >
+            {view === 'create' && stage === 'solve'
+              ? <><ArrowLeft className="glyph-icon glyph-lead" />edit</>
+              : <><GlassIcon className="btn-icon" />prove</>}
+          </button>
+          <button
+            className={`keys-open-btn${(view === 'play' || view === 'create') ? '' : ' inactive'}`}
+            onClick={(view === 'play' || view === 'create') ? () => setShowKeysModal(true) : undefined}
+            tabIndex={(view === 'play' || view === 'create') ? 0 : -1}
+            aria-hidden={!(view === 'play' || view === 'create')}
+            title="Keybindings"
+          >
+            <GearIcon className="btn-icon" />
+          </button>
 
           {user ? (
             <div className="user-menu" ref={userMenuRef}>
