@@ -577,7 +577,7 @@ impl GameState {
         let zero = builder.zero();
         let one = builder.one();
         let thirteen = builder.constant(F::from_canonical_usize(13));
-        let fourteen = builder.constant(F::from_canonical_usize(13));
+        let fourteen = builder.constant(F::from_canonical_usize(14));
         let null_target = builder.constant(GoldilocksField::from_canonical_usize(7));
         let hold_target = self.held_piece;
         let next_target = self.next_piece;
