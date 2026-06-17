@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT p.id, p.name, u.username AS \"creator?\",\n                  p.board, p.queue, p.requirements, p.num_pieces,\n                  COUNT(s.id) AS \"solve_count!\",\n                  to_char(p.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS \"created_at!\"\n           FROM puzzles p\n           LEFT JOIN users u ON u.id = p.creator_id\n           LEFT JOIN solves s ON s.puzzle_id = p.id\n           WHERE p.id = $1\n           GROUP BY p.id, u.username",
+  "query": "SELECT p.id, p.name, u.username AS \"creator?\",\n                  p.board, p.queue, p.requirements, p.num_pieces,\n                  COUNT(DISTINCT s.id) AS \"solve_count!\",\n                  COUNT(DISTINCT a.id) AS \"attempt_count!\",\n                  to_char(p.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS \"created_at!\"\n           FROM puzzles p\n           LEFT JOIN users u ON u.id = p.creator_id\n           LEFT JOIN solves s ON s.puzzle_id = p.id\n           LEFT JOIN attempts a ON a.puzzle_id = p.id\n           WHERE p.id IN (SELECT puzzle_id FROM solves WHERE user_id = $1)\n           GROUP BY p.id, u.username\n           ORDER BY p.created_at DESC",
   "describe": {
     "columns": [
       {
@@ -45,6 +45,11 @@
       },
       {
         "ordinal": 8,
+        "name": "attempt_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
         "name": "created_at!",
         "type_info": "Text"
       }
@@ -63,8 +68,9 @@
       false,
       false,
       null,
+      null,
       null
     ]
   },
-  "hash": "a7bf8cf140a47e4aaaa2c6cab5290588343279ec95fee41ddb464c482f1681bc"
+  "hash": "658f953d8ca2a1bcb9882b07c2c7d1d527a00589af1db685c649a8087c288fcc"
 }

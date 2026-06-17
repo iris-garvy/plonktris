@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO attempts (puzzle_id, user_id)\n         SELECT $1, $2 FROM puzzles WHERE id = $1 AND creator_id <> $2\n         ON CONFLICT (puzzle_id, user_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5492a02544f3f819a4e8f63501327ffb72ea8d9a9821bd60f80a9ac47ca4d1a4"
+}

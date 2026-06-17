@@ -165,6 +165,8 @@ function App() {
     setPlayPuzzle({ ...puzzle, boardRows: rows, queueIds: puzzle.queue.map(id => id + 1) });
     resetRunState();
     setView('play');
+    // record the open for difficulty stats (logged-in only; idempotent server-side, fire-and-forget)
+    if (getToken()) api.recordAttempt(puzzle.id).catch(() => {});
   }
 
   function pushPath(path: string) {

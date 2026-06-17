@@ -117,6 +117,7 @@ async fn main() {
         .route("/auth/me", get(me))
         .route("/puzzles", get(list_puzzles))
         .route("/puzzles/:id", get(get_puzzle))
+        .route("/puzzles/:id/attempt", post(record_attempt))
         .route("/stats", get(get_stats))
         .route("/leaderboard", get(get_leaderboard))
         .route("/users/:username", get(get_user_profile))
@@ -802,6 +803,7 @@ struct PuzzleInfo {
     requirements: Vec<u8>,
     num_pieces: i32,
     solve_count: i64,
+    attempt_count: i64,
     created_at: String,
 }
 
@@ -839,11 +841,13 @@ async fn list_puzzles(
     let rows = sqlx::query!(
         r#"SELECT p.id, p.name, u.username AS "creator?",
                   p.board, p.queue, p.requirements, p.num_pieces,
-                  COUNT(s.id) AS "solve_count!",
+                  COUNT(DISTINCT s.id) AS "solve_count!",
+                  COUNT(DISTINCT a.id) AS "attempt_count!",
                   to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!"
            FROM puzzles p
            LEFT JOIN users u ON u.id = p.creator_id
            LEFT JOIN solves s ON s.puzzle_id = p.id
+           LEFT JOIN attempts a ON a.puzzle_id = p.id
            WHERE ($1::text IS NULL OR p.name ILIKE '%' || $1 || '%')
              AND ($2::int IS NULL OR p.num_pieces >= $2)
              AND ($3::int IS NULL OR p.num_pieces <= $3)
@@ -856,10 +860,10 @@ async fn list_puzzles(
              AND (NOT $12::bool OR p.featured)
            GROUP BY p.id, u.username
            HAVING ($4::text IS NULL
-                   OR ($4 = 'solved'   AND COUNT(s.id) > 0)
-                   OR ($4 = 'unsolved' AND COUNT(s.id) = 0))
+                   OR ($4 = 'solved'   AND COUNT(DISTINCT s.id) > 0)
+                   OR ($4 = 'unsolved' AND COUNT(DISTINCT s.id) = 0))
            ORDER BY
-             CASE WHEN $5::text = 'solves' THEN COUNT(s.id) END DESC NULLS LAST,
+             CASE WHEN $5::text = 'solves' THEN COUNT(DISTINCT s.id) END DESC NULLS LAST,
              p.created_at DESC
            LIMIT $13"#,
         q,
@@ -889,10 +893,30 @@ async fn list_puzzles(
         requirements: r.requirements,
         num_pieces: r.num_pieces,
         solve_count: r.solve_count,
+        attempt_count: r.attempt_count,
         created_at: r.created_at,
     }).collect();
 
     Ok(Json(serde_json::json!({ "puzzles": puzzles })))
+}
+
+// Record that a logged-in user opened a puzzle. Idempotent per (puzzle, user) via the unique
+// constraint, and the creator's own opens don't count — so attempt_count mirrors solve_count.
+async fn record_attempt(
+    State(state): State<Arc<AppState>>,
+    Path(puzzle_id): Path<uuid::Uuid>,
+    auth: AuthUser,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    sqlx::query!(
+        "INSERT INTO attempts (puzzle_id, user_id)
+         SELECT $1, $2 FROM puzzles WHERE id = $1 AND creator_id <> $2
+         ON CONFLICT (puzzle_id, user_id) DO NOTHING",
+        puzzle_id,
+        auth.id,
+    )
+    .execute(&state.db).await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+    Ok(Json(serde_json::json!({})))
 }
 
 async fn get_puzzle(
@@ -902,11 +926,13 @@ async fn get_puzzle(
     let r = sqlx::query!(
         r#"SELECT p.id, p.name, u.username AS "creator?",
                   p.board, p.queue, p.requirements, p.num_pieces,
-                  COUNT(s.id) AS "solve_count!",
+                  COUNT(DISTINCT s.id) AS "solve_count!",
+                  COUNT(DISTINCT a.id) AS "attempt_count!",
                   to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!"
            FROM puzzles p
            LEFT JOIN users u ON u.id = p.creator_id
            LEFT JOIN solves s ON s.puzzle_id = p.id
+           LEFT JOIN attempts a ON a.puzzle_id = p.id
            WHERE p.id = $1
            GROUP BY p.id, u.username"#,
         puzzle_id
@@ -925,6 +951,7 @@ async fn get_puzzle(
         requirements: r.requirements,
         num_pieces: r.num_pieces,
         solve_count: r.solve_count,
+        attempt_count: r.attempt_count,
         created_at: r.created_at,
     }))
 }
@@ -1025,11 +1052,13 @@ async fn get_user_profile(
     let created = sqlx::query!(
         r#"SELECT p.id, p.name, u.username AS "creator?",
                   p.board, p.queue, p.requirements, p.num_pieces,
-                  COUNT(s.id) AS "solve_count!",
+                  COUNT(DISTINCT s.id) AS "solve_count!",
+                  COUNT(DISTINCT a.id) AS "attempt_count!",
                   to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!"
            FROM puzzles p
            LEFT JOIN users u ON u.id = p.creator_id
            LEFT JOIN solves s ON s.puzzle_id = p.id
+           LEFT JOIN attempts a ON a.puzzle_id = p.id
            WHERE p.creator_id = $1
            GROUP BY p.id, u.username
            ORDER BY p.created_at DESC"#,
@@ -1041,17 +1070,19 @@ async fn get_user_profile(
     .into_iter().map(|r| PuzzleInfo {
         id: r.id.to_string(), name: r.name, creator: r.creator,
         board: r.board, queue: r.queue, requirements: r.requirements,
-        num_pieces: r.num_pieces, solve_count: r.solve_count, created_at: r.created_at,
+        num_pieces: r.num_pieces, solve_count: r.solve_count, attempt_count: r.attempt_count, created_at: r.created_at,
     }).collect();
 
     let solved = sqlx::query!(
         r#"SELECT p.id, p.name, u.username AS "creator?",
                   p.board, p.queue, p.requirements, p.num_pieces,
-                  COUNT(s.id) AS "solve_count!",
+                  COUNT(DISTINCT s.id) AS "solve_count!",
+                  COUNT(DISTINCT a.id) AS "attempt_count!",
                   to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!"
            FROM puzzles p
            LEFT JOIN users u ON u.id = p.creator_id
            LEFT JOIN solves s ON s.puzzle_id = p.id
+           LEFT JOIN attempts a ON a.puzzle_id = p.id
            WHERE p.id IN (SELECT puzzle_id FROM solves WHERE user_id = $1)
            GROUP BY p.id, u.username
            ORDER BY p.created_at DESC"#,
@@ -1063,7 +1094,7 @@ async fn get_user_profile(
     .into_iter().map(|r| PuzzleInfo {
         id: r.id.to_string(), name: r.name, creator: r.creator,
         board: r.board, queue: r.queue, requirements: r.requirements,
-        num_pieces: r.num_pieces, solve_count: r.solve_count, created_at: r.created_at,
+        num_pieces: r.num_pieces, solve_count: r.solve_count, attempt_count: r.attempt_count, created_at: r.created_at,
     }).collect();
 
     // in-flight / failed submissions, visible only to the profile's owner

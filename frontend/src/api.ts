@@ -21,6 +21,7 @@ export interface Puzzle {
   requirements: number[];   // 8 bytes
   num_pieces: number;
   solve_count: number;
+  attempt_count: number;
   created_at?: string;
 }
 
@@ -131,6 +132,9 @@ export const api = {
   listPuzzles: (filters: PuzzleFilters = {}) =>
     request<{ puzzles: Puzzle[] }>(`/puzzles${toQueryString(filters)}`),
   getPuzzle: (id: string) => request<Puzzle>(`/puzzles/${id}`),
+  // record that the current (logged-in) user opened this puzzle; idempotent server-side
+  recordAttempt: (id: string) =>
+    request<Record<string, never>>(`/puzzles/${id}/attempt`, { method: 'POST' }),
   getUserProfile: (username: string) =>
     request<UserProfile>(`/users/${encodeURIComponent(username)}`),
   getStats: () => request<SiteStats>('/stats'),
