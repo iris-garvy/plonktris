@@ -122,6 +122,12 @@ html, body {
   font-weight: 700;
   color: var(--pink);
   letter-spacing: 0.04em;
+  /* keep a long name from wrapping (which would overflow the fixed-height header) or pushing
+     the login button off-screen — truncate with an ellipsis instead */
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .play-board-creator {
   font-size: 10px;
@@ -375,6 +381,21 @@ html, body {
 
 /* Mobile-only compact hold + queue chips, shown in place of the full-size hold box and queue
    boxes (hidden in the media query below). Reuses the puzzle-card chip look. */
+/* Header: single non-wrapping row would clip the right-side buttons (login / prove / gear) on
+   narrow widths. Below ~700px, stack it — logo on its own row, nav + buttons centered below. */
+@media (max-width: 700px) {
+  .app-header {
+    flex-wrap: wrap;
+    height: auto;             /* override the fixed desktop height so the second row fits */
+    row-gap: 10px;
+    justify-content: center;
+  }
+  .logo-group { flex-basis: 100%; justify-content: center; } /* logo alone on the top row */
+  .view-tabs  { margin-left: 0; }
+  .stage-tabs { margin-left: 0; }                            /* don't force it to its own row */
+  .play-board-title { display: none; }                       /* puzzle name omitted on small headers */
+}
+
 .mobile-queue-strip { display: none; }
 .mqs-chip {
   display: inline-flex;
