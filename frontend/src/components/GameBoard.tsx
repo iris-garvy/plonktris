@@ -364,14 +364,14 @@ export default function GameBoard({ initialBoard, queue, onComplete, onQueueView
           </div>
           {overflowWarn && (
             <div className="overflow-warn">
-              max 32 moves per piece — piece reset
+              piece reset: max 32 moves per piece 
             </div>
           )}
           {sidePanel}
         </div>
 
         <div className="board-column">
-        {/* same height as edit-mode toolbar; shows live requirement progress */}
+        {/* same height as edit-mode toolbar */}
         <div className="game-toolbar-row">
           {reqText && (
             <span className={`req-summary ${reqsDone ? 'met' : ''}`}>
