@@ -14,7 +14,7 @@ Plonktris is a Tetris puzzle platform where only the puzzle creator knows the so
 | Monolithic (6–8 pieces) | 32,768 | 8.9s | 3ms | 161 KB |
 | Recursive (11+ pieces) | — | ~30s | 3ms | 147 KB |
 
-Verification time and proof size are constant regardless of solution length. The recursive prover handles solutions past the ~11 piece WASM memory wall where the monolithic circuit OOMs.
+Verification time and proof size are constant regardless of solution length. The recursive prover handles solutions past the ~11 piece WASM memory wall where the monolithic circuit OOMs. Note that these numbers were benchmarked for an M3, it's slower for WASM proving and the current plonktris server.
 
 ## Architecture
 
