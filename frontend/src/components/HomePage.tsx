@@ -64,7 +64,7 @@ export default function HomePage({ onPlay, onCreator }: HomePageProps) {
         if (cancelled) return;
         setData({
           stats,
-          leaders: lb.leaders.slice(0, 5),
+          leaders: lb.leaders.slice(0, 8),
           featured: featured.puzzles,
           unsolved: unsolved.puzzles,
           tspin: tspin.puzzles,
@@ -108,6 +108,19 @@ export default function HomePage({ onPlay, onCreator }: HomePageProps) {
       </div>
 
       <div className="home-main">
+        {empty && (
+          <div className="browse-status">no puzzles quite yet...</div>
+        )}
+        <Rail title="FEATURED" puzzles={data.featured} onPlay={onPlay} onCreator={onCreator} />
+        <Rail
+          title="UNSOLVED PUZZLES"
+          hint="be the first to crack these"
+          puzzles={data.unsolved}
+          onPlay={onPlay}
+          onCreator={onCreator}
+        />
+        <Rail title="T-SPIN PUZZLES" puzzles={data.tspin} onPlay={onPlay} onCreator={onCreator} />
+
         <section className="home-rail">
           <div className="home-rail-head">
             <span className="home-rail-title">LEADERBOARD</span>
@@ -140,18 +153,6 @@ export default function HomePage({ onPlay, onCreator }: HomePageProps) {
           )}
         </section>
 
-        {empty && (
-          <div className="browse-status">no puzzles quite yet...</div>
-        )}
-        <Rail title="FEATURED" puzzles={data.featured} onPlay={onPlay} onCreator={onCreator} />
-        <Rail
-          title="UNSOLVED PUZZLES"
-          hint="be the first to crack these"
-          puzzles={data.unsolved}
-          onPlay={onPlay}
-          onCreator={onCreator}
-        />
-        <Rail title="T-SPIN PUZZLES" puzzles={data.tspin} onPlay={onPlay} onCreator={onCreator} />
         <Rail title="PC PUZZLES" puzzles={data.pc} onPlay={onPlay} onCreator={onCreator} />
         <Rail title="ATTACK PUZZLES" puzzles={data.attack} onPlay={onPlay} onCreator={onCreator} />
       </div>
