@@ -2,6 +2,8 @@
 
 [plonktris.com](https://plonktris.com)
 
+![Plonktris screenshot](frontend/public/homepage.png)
+
 Plonktris is a Tetris puzzle platform where only the puzzle creator knows the solution. Users prove a puzzle is solvable with a zero knowledge proof; the proof is verified without revealing *how* the puzzle was solved. Built on plonky2 (PLONK + FRI over the Goldilocks field) with recursive IVC to prove arbitrarily long solutions within browser memory constraints, and constant-size proofs that verify in constant time regardless of solution length.
 
 > **Disclaimer:** the proofs aren't *actually* run in zero knowledge mode right now (purely for cost). Blinding the witness roughly doubles proving cost, so the live system uses non-ZK succinct validity proofs. Plonktris uses 2 differenct circuits and both can be made zero knowledge without toooooo much effort.
