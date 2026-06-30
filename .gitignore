@@ -2,3 +2,5 @@
 /pkg
 /out
 /.env
+# local editor/agent tooling
+.claude/
