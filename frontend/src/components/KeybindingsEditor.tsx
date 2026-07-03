@@ -23,10 +23,6 @@ function KeyCap({ binding }: { binding: string }) {
   );
 }
 
-function clamp(value: string | number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, Number(value) || 0));
-}
-
 interface KeybindingsEditorProps {
   bindings: Bindings;
   onChange: (next: Bindings) => void;
@@ -80,7 +76,7 @@ export default function KeybindingsEditor({ bindings, onChange, handling, onHand
         ))}
       </div>
 
-      <div className="keys-title">HANDLING</div>
+      <div className="keys-title">HANDLING <span className="keys-unit">(locked for now)</span></div>
 
       <div className="keys-list">
         <div className="keys-row">
@@ -88,10 +84,8 @@ export default function KeybindingsEditor({ bindings, onChange, handling, onHand
           <input
             type="number"
             className="handling-input"
-            min={0}
-            max={500}
-            value={handling.das}
-            onChange={e => onHandlingChange({ ...handling, das: clamp(e.target.value, 0, 500) })}
+            value={DEFAULT_HANDLING.das}
+            disabled
           />
         </div>
         <div className="keys-row">
@@ -99,10 +93,8 @@ export default function KeybindingsEditor({ bindings, onChange, handling, onHand
           <input
             type="number"
             className="handling-input"
-            min={0}
-            max={200}
-            value={handling.arr}
-            onChange={e => onHandlingChange({ ...handling, arr: clamp(e.target.value, 0, 200) })}
+            value={DEFAULT_HANDLING.arr}
+            disabled
           />
         </div>
       </div>
