@@ -16,7 +16,7 @@
 .about-title {
   font-size: 26px;
   font-weight: 800;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.05em;
   background: var(--pink);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -38,17 +38,18 @@
 .about-section h2 {
   font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--lavender);
 }
 
 .about-steps {
   margin: 0;
-  padding-left: 18px;
+  padding-left: 28px;
   display: flex;
   flex-direction: column;
   gap: 7px;
+  list-style-type: lower-latin;
 }
 .about-steps li {
   font-size: 13px;
@@ -116,6 +117,12 @@
   line-height: 1.55;
   color: var(--text-dim);
 }
+
+
+
+.about-page .icon-fast   { height: .9em; vertical-align: -1px; margin-right: 0.7em; }
+.about-page .icon-secure   { height: 1em; vertical-align: -1px; margin-right: 0.6em; }
+.about-page .icon-gear   { height: 1em; vertical-align: -0.18em; margin-right: 0.65em; }
 
 .about-section > p {
   font-size: 13px;

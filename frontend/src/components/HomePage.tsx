@@ -114,7 +114,6 @@ export default function HomePage({ onPlay, onCreator }: HomePageProps) {
         <Rail title="FEATURED" puzzles={data.featured} onPlay={onPlay} onCreator={onCreator} />
         <Rail
           title="UNSOLVED PUZZLES"
-          hint="be the first to crack these"
           puzzles={data.unsolved}
           onPlay={onPlay}
           onCreator={onCreator}

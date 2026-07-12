@@ -29,21 +29,21 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
       <section className="about-section">
         <h2>creating a puzzle</h2>
         <ol className="about-steps">
-          <li>In <strong>create</strong>, draw a starting board and set the piece queue.</li>
-          <li>Hit the <strong>prove</strong> button and set the requirements for the puzzle.</li>
-          <li>Prove your puzzle is solvable by solving it yourself.</li>
-          <li>Press the <strong>submit</strong> button. plonktris will generate a proof of solvability and publish it!</li>
+          <li>in <strong>create</strong>, draw a starting board and set the piece queue.</li>
+          <li>hit the <strong>prove</strong> button and set the requirements for the puzzle.</li>
+          <li>prove your puzzle is solvable by solving it yourself.</li>
+          <li>press the <strong>submit</strong> button. plonktris will generate a proof of solvability and publish it!</li>
         </ol>
       </section>
 
       <section className="about-section">
         <h2>solving a puzzle</h2>
         <ol className="about-steps">
-          <li>Open a puzzle from the home page or search.</li>
-          <li>Solve the puzzle by fulfilling the requirements</li>
+          <li>open a puzzle from the home page or search.</li>
+          <li>solve the puzzle by fulfilling the requirements</li>
           <li>
-            When the requirements are met, hit <strong>submit</strong>. plonktris will generate a proof
-            that you know a solution. If you're logged in, the solve is recorded
+            when the requirements are met, hit <strong>submit</strong>. plonktris will generate a proof
+            that you know a solution. if you're logged in, the solve is recorded
             on your profile.
           </li>
         </ol>
@@ -65,14 +65,14 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
         <h2>fast vs. secure proving</h2>
         <div className="about-modes">
           <div className="about-mode">
-            <div className="about-mode-name"><CircleIcon className="btn-icon" />fast (default)</div>
+            <div className="about-mode-name"><CircleIcon className="btn-icon icon-fast" />fast (default)</div>
             <p>
               The server generates the proof. This is speedy (~10 seconds) 
               and is handled in the cloud so you can close your browser and check on its progress in your profile page.
             </p>
           </div>
           <div className="about-mode">
-            <div className="about-mode-name"><LockIcon className="btn-icon" />secure (slow)</div>
+            <div className="about-mode-name"><LockIcon className="btn-icon icon-secure" />secure (slow)</div>
             <p>
               The browser generates the proof. This is quite a bit slower (~2 minutes) and you
               cannot leave the site while the proof is generating. You can turn this option on in your
@@ -86,7 +86,7 @@ export default function AboutPage({ onBrowse, onCreate }: AboutPageProps) {
         <h2>controls</h2>
         <p>
           Move, rotate, hard/soft drop and hold with the keyboard. You can view
-          and rebind everything from the <GearIcon className="btn-icon" />button in the header.
+          and rebind everything from the <GearIcon className="btn-icon icon-gear" />button in the header.
         </p>
       </section>
 

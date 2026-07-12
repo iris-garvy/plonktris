@@ -19,6 +19,12 @@
   --text-dim:      #4e4350;
   --text-muted:    #a3928f;
 
+  /* Font roles (edit here to change fonts site-wide). */
+  --font-body:    'JetBrains Mono', 'Courier New', monospace;               /* body / all UI text */
+  --font-heading: system-ui, 'Segoe UI', Roboto, sans-serif;               /* h1, h2 */
+  --font-logo:    'Charter', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif; /* wordmark */
+  --font-mono:    ui-monospace, Consolas, monospace;                       /* code, counters */
+
   /* Board scale. 26px on desktop/tablet; shrinks on narrow phones so the board + its hold
      box and queue fit without overflow. Pieces and chrome are all derived from this, so the
      whole board scales as one. At any viewport >= ~400px this is exactly 26px (unchanged). */
@@ -33,9 +39,17 @@ html {
 html, body {
   background: var(--bg-base);
   color: var(--text);
-  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-family: var(--font-body);
   min-height: 100vh;
   overflow-x: hidden;
+}
+
+h1, h2 {
+  font-family: var(--font-heading);
+}
+
+code, .counter {
+  font-family: var(--font-mono);
 }
 
 .app {
@@ -81,13 +95,13 @@ html, body {
 }
 
 .logo-word {
-  font-family: 'Charter', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  font-family: var(--font-logo);
   font-size: 24px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   color: var(--text);
   line-height: 1;
-  margin-left: 0px;
+  margin-left: 1px;
 }
 
 .header-sub {
@@ -272,13 +286,13 @@ html, body {
 .btn-icon {
   height: 1em;
   width: auto;
-  vertical-align: -0.15em;
-  margin-right: 0.3em;
+  vertical-align: -0.12em;
+  margin-right: 0.5em;
   fill: currentColor;
 }
 /* magnifying glass reads right-of-center (its handle) when inline beside text;
    nudge it left. Only on the inline solve buttons, not the stacked header tab. */
-.glass-nudge { transform: translateX(-2px); }
+.glass-nudge {  vertical-align: -0.15em; }
 /* two-tone cutouts (lock keyhole, gear center) match the app surface */
 .btn-icon .cut {
   fill: var(--bg-base);
@@ -286,7 +300,7 @@ html, body {
 .keys-open-btn .btn-icon {
   height: 1.2em;
   margin-right: 0;
-  vertical-align: -0.2em;
+  vertical-align: -0.25em;
 }
 
 /* lucide icons are stroke-based, so they inherit color without a fill rule */
