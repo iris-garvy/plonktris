@@ -260,17 +260,17 @@ function App() {
     if (secure) setSecureProvingActive(true);
     try {
       let boardBytes: Uint8Array, queueBytes: Uint8Array, reqBytes: Uint8Array;
-      let extra: { token: string | null; puzzleId?: string; name?: string };
+      let extra: { puzzleId?: string; name?: string };
       if (view === 'play' && playPuzzle) {
         boardBytes = new Uint8Array(playPuzzle.board);
         queueBytes = new Uint8Array(playPuzzle.queue);
         reqBytes   = new Uint8Array(playPuzzle.requirements);
-        extra = { token: getToken(), puzzleId: playPuzzle.id };
+        extra = { puzzleId: playPuzzle.id };
       } else {
         boardBytes = boardToUint8(board);
         queueBytes = new Uint8Array(queue.map(id => id - 1));
         reqBytes   = new Uint8Array(requirements);
-        extra = { token: getToken(), name: puzzleName || 'untitled' };
+        extra = { name: puzzleName || 'untitled' };
       }
       const movesBytes = movesToUint8(secretMoves);
       const result = await prove(boardBytes, queueBytes, reqBytes, movesBytes, secure ? 'browser' : 'server', extra);

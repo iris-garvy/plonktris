@@ -57,6 +57,16 @@ interface RequestOptions {
   body?: unknown;
 }
 
+/** Error thrown by request() on a non-2xx response, carrying the HTTP status. */
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 async function request<T>(path: string, { method = 'GET', body }: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
@@ -75,7 +85,7 @@ async function request<T>(path: string, { method = 'GET', body }: RequestOptions
       const text = await res.text();
       try { msg = JSON.parse(text).error ?? text; } catch { msg = text || msg; }
     } catch { /* keep statusText */ }
-    throw new Error(msg);
+    throw new ApiError(msg, res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -122,6 +132,16 @@ function toQueryString(filters: PuzzleFilters): string {
   return s ? `?${s}` : '';
 }
 
+/** Puzzle identity fields shared by both proof endpoints. `name` is set when publishing
+ *  a new puzzle; `puzzle_id` is set when solving an existing one (never both). */
+interface ProofTarget {
+  board: number[];
+  queue: number[];
+  requirements: number[];
+  name?: string;
+  puzzle_id?: string;
+}
+
 export const api = {
   register: (username: string, password: string) =>
     request<AuthResponse>('/auth/register', { method: 'POST', body: { username, password } }),
@@ -139,4 +159,21 @@ export const api = {
     request<UserProfile>(`/users/${encodeURIComponent(username)}`),
   getStats: () => request<SiteStats>('/stats'),
   getLeaderboard: () => request<{ leaders: LeaderEntry[] }>('/leaderboard'),
+
+  // Submit an already-generated (in-browser) proof for synchronous verification.
+  submitProof: (body: ProofTarget & { proof: number[] }) =>
+    request<{ proof_id: string }>('/submit', { method: 'POST', body }),
+
+  // Ask the server to prove the solution asynchronously. Returns { rateLimited: true }
+  // instead of throwing when the per-user fast-proving limit (HTTP 429) is hit.
+  requestServerProof: async (
+    body: ProofTarget & { actions: number[] },
+  ): Promise<{ proof_id: string } | { rateLimited: true }> => {
+    try {
+      return await request<{ proof_id: string }>('/request', { method: 'POST', body });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 429) return { rateLimited: true };
+      throw e;
+    }
+  },
 };
