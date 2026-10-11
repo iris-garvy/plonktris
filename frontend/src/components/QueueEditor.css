@@ -1,9 +1,48 @@
 .queue-editor {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   width: var(--box);
-  padding-top: 12px;
+}
+
+.queue-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.queue-head .queue-label { border-bottom: none; margin-bottom: 0; padding-bottom: 6px; }
+.queue-count {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.queue-count.full { color: var(--pink); }
+
+/* click-to-add piece buttons (mouse / touch alternative to typing) */
+.queue-pick {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+}
+.queue-pick-btn {
+  height: 18px;
+  padding: 0;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text);
+  background: color-mix(in srgb, var(--pc) 35%, white);
+  border: 1px solid color-mix(in srgb, var(--pc) 70%, black);
+  cursor: pointer;
+  transition: transform 0.08s;
+}
+.queue-pick-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.queue-pick-btn:disabled { opacity: 0.35; cursor: default; }
+.queue-pick-btn.erase {
+  background: var(--bg-raised);
+  border-color: var(--border);
+  color: var(--text-muted);
 }
 
 .queue-text-input {
@@ -79,4 +118,22 @@
   color: var(--text);
   background: color-mix(in srgb, var(--pc) 45%, white);
   border: 1px solid color-mix(in srgb, var(--pc) 75%, black);
+}
+
+/* ── panel variant (create page side panel) ── */
+.queue-editor.panel { width: 100%; }
+.queue-editor.panel .queue-text-input { width: 100%; height: 30px; }
+.queue-editor.panel .queue-pick { grid-template-columns: repeat(8, 1fr); }
+.queue-editor.panel .queue-pick-btn { height: 22px; font-size: 10px; }
+
+.queue-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  min-height: 15px;
+}
+.queue-strip-empty {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-style: italic;
 }

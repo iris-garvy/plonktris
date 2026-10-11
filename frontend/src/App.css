@@ -71,8 +71,7 @@ code, .counter {
   gap: 16px;
   padding-bottom: 12px;
   border-bottom: 2px solid var(--border);
-  /* Fixed height so per-mode header content (e.g. the play-mode puzzle title) can't change
-     the header height and shift the board. Keeps create and play vertically identical. */
+  /* fixed height so the page never shifts vertically when switching views */
   height: 52px;
   box-sizing: border-box;
 }
@@ -85,6 +84,8 @@ code, .counter {
   border: none;
   padding: 0;
   cursor: pointer;
+  text-decoration: none;
+  flex-shrink: 0;
 }
 
 .logo-mark {
@@ -104,13 +105,6 @@ code, .counter {
   margin-left: 1px;
 }
 
-.header-sub {
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  margin-left: 4px;
-}
-
 .view-tabs {
   display: flex;
   align-items: center;
@@ -118,43 +112,14 @@ code, .counter {
   margin-left: 16px;
 }
 
-.stage-tabs {
+.header-actions {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-/* keep the button's layout footprint but make it invisible + inert (vs display:none, which
-   would collapse the space and shift the header when switching views) */
-.stage-tabs .inactive { visibility: hidden; pointer-events: none; }
-
-.play-board-title {
-  display: flex;
-  align-items: baseline;
   gap: 8px;
-  margin-left: 16px;
-}
-.play-board-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--pink);
-  letter-spacing: 0.04em;
-  /* keep a long name from wrapping (which would overflow the fixed-height header) or pushing
-     the login button off-screen — truncate with an ellipsis instead */
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.play-board-creator {
-  font-size: 10px;
-  color: var(--text-muted);
-  letter-spacing: 0.04em;
 }
 
 .login-btn {
-  margin-left: 8px;
   background: none;
   border: 1px solid var(--lavender);
   color: var(--lavender);
@@ -168,10 +133,10 @@ code, .counter {
 }
 
 .login-btn:hover { background: rgba(181, 165, 255, 0.1); }
+.login-btn.placeholder { visibility: hidden; }
 
 .user-menu {
   position: relative;
-  margin-left: 8px;
 }
 
 .user-name {
@@ -213,6 +178,8 @@ code, .counter {
 }
 
 .user-dropdown-item {
+  display: block;
+  text-decoration: none;
   background: none;
   border: none;
   text-align: left;
@@ -228,11 +195,9 @@ code, .counter {
 .user-dropdown-item:hover { background: var(--bg-raised); color: var(--lavender); }
 .user-dropdown-item:last-child:hover { color: #d6336c; }
 
-.browse-main {
-  display: block;
-}
-
 .stage-tab {
+  display: inline-block;
+  text-decoration: none;
   background: none;
   border: 1px solid var(--border);
   color: var(--text-muted);
@@ -261,27 +226,22 @@ code, .counter {
   background: rgba(255, 189, 222, 0.08);
 }
 
-.stage-sep {
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
-.keys-open-btn {
-  margin-left: 8px;
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: 1px solid var(--border);
   color: var(--text-muted);
   font-family: inherit;
   font-size: 12px;
-  padding: 3px 8px;
+  height: 24px;
+  padding: 0 8px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
-
-.keys-open-btn:hover {
-  border-color: var(--lavender);
-  color: var(--lavender);
-}
+.icon-btn:hover { border-color: var(--lavender); color: var(--lavender); }
+.icon-btn .btn-icon { height: 1.2em; margin-right: 0; vertical-align: 0; }
 
 .btn-icon {
   height: 1em;
@@ -290,17 +250,9 @@ code, .counter {
   margin-right: 0.5em;
   fill: currentColor;
 }
-/* magnifying glass reads right-of-center (its handle) when inline beside text;
-   nudge it left. Only on the inline solve buttons, not the stacked header tab. */
-.glass-nudge {  vertical-align: -0.15em; }
 /* two-tone cutouts (lock keyhole, gear center) match the app surface */
 .btn-icon .cut {
   fill: var(--bg-base);
-}
-.keys-open-btn .btn-icon {
-  height: 1.2em;
-  margin-right: 0;
-  vertical-align: -0.25em;
 }
 
 /* lucide icons are stroke-based, so they inherit color without a fill rule */
@@ -317,26 +269,13 @@ code, .counter {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  gap: 20px;
   flex: 1;
+  min-width: 0;
 }
-
-.sidebar {
-  flex-shrink: 0;
-  position: sticky;
-  top: 16px;
-}
-
-.sidebar-left  { width: 0px; }
-.sidebar-right { width: 105px; }
-
-.board-section {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
+.app-main.view-home,
+.app-main.view-search,
+.app-main.view-profile,
+.app-main.view-about { display: block; }
 
 .panel-label {
   font-size: 9px;
@@ -347,42 +286,6 @@ code, .counter {
   border-bottom: 1px solid var(--border);
   padding-bottom: 6px;
   margin-bottom: 6px;
-}
-
-.start-solving-btn {
-  width: 100%;   
-  background: transparent;
-  border: 1px solid var(--pink);
-  color: var(--pink);
-  font-family: inherit;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 6px 0;
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.start-solving-btn:hover:not(:disabled) {
-  background: rgba(255, 189, 222, 0.1);
-}
-
-.start-solving-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.right-proof {
-  margin-top: 8px; 
-  width: 80px;
-}
-
-.solve-hint {
-  margin-top: 6px;
-  font-size: 8px;
-  line-height: 1.5;
-  color: var(--text-muted);
-  letter-spacing: 0.03em;
 }
 
 ::-webkit-scrollbar        { width: 6px; height: 6px; }
@@ -397,10 +300,7 @@ code, .counter {
   outline-offset: 2px;
 }
 
-/* Mobile-only compact hold + queue chips, shown in place of the full-size hold box and queue
-   boxes (hidden in the media query below). Reuses the puzzle-card chip look. */
-/* Header: single non-wrapping row would clip the right-side buttons (login / prove / gear) on
-   narrow widths. Below ~700px, stack it — logo on its own row, nav + buttons centered below. */
+/* Below ~700px the header stacks: logo on its own row, nav + buttons centered below. */
 @media (max-width: 700px) {
   .app-header {
     flex-wrap: wrap;
@@ -410,52 +310,152 @@ code, .counter {
   }
   .logo-group { flex-basis: 100%; justify-content: center; } /* logo alone on the top row */
   .view-tabs  { margin-left: 0; }
-  .stage-tabs { margin-left: 0; }                            /* don't force it to its own row */
-  .play-board-title { display: none; }                       /* puzzle name omitted on small headers */
-  /* prove is never usable on mobile, but keep its space reserved (visibility, not display)
-     so the stacked header doesn't shift when switching create <-> about */
-  .stage-tabs .create-stage { visibility: hidden; pointer-events: none; }
+  .header-actions { margin-left: 0; }
 }
 
-.mobile-queue-strip { display: none; }
-.mqs-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--text);
-  background: color-mix(in srgb, var(--pc) 45%, white);
-  border: 1px solid color-mix(in srgb, var(--pc) 75%, black);
-  flex-shrink: 0;
-}
-.mqs-chip.mqs-hold { background: var(--bg-raised); border: 1px dashed var(--border); }
-.mqs-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
-
-/* Below ~520px a 10-wide board fills the screen, so the board becomes a compact VIEW: it
-   scales down (see --cell-size), the hold box / queue boxes / prove buttons are replaced by the
-   chip strip above, and the board is centered on its own. (Touch play is a separate effort.) */
 @media (max-width: 520px) {
-  .app { padding-left: 10px; padding-right: 10px; }
-  .app-main { flex-direction: column; align-items: center; }
-  /* extra specificity (parent selector) so these beat the equal-specificity display rules
-     in TetrisBoard.css / GameBoard.css regardless of stylesheet import order */
-  .app-main .sidebar { display: none; }              /* big queue boxes / text input */
-  .board-section .board-side-panel { display: none; }/* hold box + prove/submit + hints */
-  .stage-tabs .create-stage { display: none; }       /* header prove/edit button */
-  .mobile-queue-strip {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    max-width: 100%;
-    margin-bottom: 2px;
-  }
+  .app { padding-left: 12px; padding-right: 12px; }
+  .view-tabs { gap: 4px; }
+  .stage-tab { padding: 5px 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ── shared controls ── */
+
+.text-input {
+  width: 100%;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  color: var(--pink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 7px 9px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.text-input:focus { border-color: var(--pink); }
+.text-input::placeholder { color: var(--text-muted); font-weight: 400; }
+.text-input:disabled { opacity: 0.6; }
+
+.primary-btn,
+.ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 8px 14px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+.primary-btn {
+  background: var(--pink);
+  border: 1px solid var(--pink);
+  color: #fff;
+}
+.primary-btn:hover:not(:disabled) { background: #d92f88; border-color: #d92f88; }
+.ghost-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.ghost-btn:hover:not(:disabled) { border-color: var(--lavender); color: var(--lavender); }
+.primary-btn:disabled,
+.ghost-btn:disabled { opacity: 0.4; cursor: default; }
+
+.text-btn {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.text-btn:hover:not(:disabled) { color: var(--lavender); }
+.text-btn.danger { color: #d6336c; }
+.text-btn:disabled { opacity: 0.4; cursor: default; text-decoration: none; }
+
+/* loading / error states for whole views */
+.view-status {
+  width: 100%;
+  text-align: center;
+  padding: 60px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.view-status-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+/* ── modals (auth, settings) ── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(24, 17, 23, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 100;
+}
+
+.modal-panel {
+  width: 250px;
+  max-width: 100%;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--bg-base);
+  border: 1px solid var(--pink);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.modal-btn {
+  flex: 1;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 8px;
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.15s;
+}
+.modal-btn:disabled { opacity: 0.5; cursor: default; }
+
+.modal-btn.cancel {
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.modal-btn.cancel:hover { border-color: var(--text-dim); color: var(--text-dim); }
+
+.modal-btn.submit {
+  border: 1px solid var(--pink);
+  color: var(--pink);
+}
+.modal-btn.submit:hover:not(:disabled) { background: rgba(255, 189, 222, 0.1); }

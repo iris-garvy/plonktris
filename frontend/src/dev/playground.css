@@ -1,0 +1,102 @@
+/* Dev playground only. Mirrors the site's theme tokens (App.css) so components look as they will
+   in the app, without depending on the app's stylesheet. */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --pink: #ee3d99;
+  --pink-soft: #ffbdde;
+  --lavender: #7a63e0;
+  --lavender-soft: #b5a5ff;
+  --bg-base: #fdf6f0;
+  --bg-panel: #ffffff;
+  --bg-raised: #f6ebe7;
+  --border: #e6d8d2;
+  --text: #181117;
+  --text-dim: #4e4350;
+  --text-muted: #a3928f;
+}
+
+html, body {
+  background: var(--bg-base);
+  color: var(--text);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.pg {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 14px 16px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pg-header button, .pg-samples button, .pg-side button, .pg-result button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+.pg-header button:hover, .pg-header button.active,
+.pg-samples button:hover, .pg-samples button.active,
+.pg-side button:hover:not(:disabled), .pg-result button:hover { border-color: var(--pink); color: var(--pink); }
+.pg-side button:disabled { opacity: 0.4; cursor: default; }
+
+.pg-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--border);
+}
+.pg-logo { font-family: Charter, Georgia, serif; font-size: 20px; font-weight: 600; margin-right: 10px; }
+.pg-logo i { font-size: 12px; color: var(--text-muted); font-family: inherit; }
+.pg-handling { margin-left: auto; font-size: 10px; color: var(--text-muted); }
+.pg-settings { border-color: var(--lavender) !important; color: var(--lavender) !important; }
+
+.pg-samples { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.pg-side { display: flex; flex-direction: column; gap: 6px; }
+.pg-side button { width: 100%; }
+.pg-req { font-size: 9px; color: var(--text-muted); }
+.pg-queue { font-size: 9px; color: var(--text-dim); word-break: break-all; }
+.pg-queue-input {
+  width: 100%;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--pink);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  padding: 4px 5px;
+  outline: none;
+}
+
+.pg-result {
+  background: var(--bg-panel);
+  border: 1px solid var(--pink);
+  padding: 12px 14px;
+  font-size: 10px;
+  color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+.pg-result.fail { border-color: var(--text-muted); }
+.pg-result-title { font-size: 14px; font-weight: 700; color: var(--pink); }
+.pg-result.fail .pg-result-title { color: var(--text-dim); }
+.pg-result button { margin-top: 4px; }
+
+.pg-log { font-size: 9px; color: var(--text-muted); min-height: 40px; white-space: pre-wrap; }

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Star } from 'lucide-react';
-import { api, type Puzzle, type SiteStats, type LeaderEntry } from '../api';
+import { api, errorMessage, type Puzzle, type SiteStats, type LeaderEntry } from '../api';
 import PuzzleCard from './PuzzleCard';
+import { linkClick, profilePath } from '../puzzleInfo';
 import './BrowsePage.css';
 import './HomePage.css';
 
@@ -48,6 +49,7 @@ function Rail({
 export default function HomePage({ onPlay, onCreator }: HomePageProps) {
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,15 +74,18 @@ export default function HomePage({ onPlay, onCreator }: HomePageProps) {
           attack: attack.puzzles,
         });
       })
-      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : String(err)); });
+      .catch(err => { if (!cancelled) setError(errorMessage(err)); });
     return () => { cancelled = true; };
-  }, []);
+  }, [attempt]);
 
   if (error) {
     return (
       <div className="browse-status">
-        <div className="browse-error">couldn't load the front page: {error}</div>
-        <div className="browse-hint">is the server running on :3000?</div>
+        <div className="browse-error">couldn't load puzzles: {error}</div>
+        <div className="browse-hint">the server may be waking up — give it a few seconds.</div>
+        <button className="browse-retry" onClick={() => { setError(null); setAttempt(a => a + 1); }}>
+          try again
+        </button>
       </div>
     );
   }
@@ -109,7 +114,7 @@ export default function HomePage({ onPlay, onCreator }: HomePageProps) {
 
       <div className="home-main">
         {empty && (
-          <div className="browse-status">no puzzles quite yet...</div>
+          <div className="browse-status">no puzzles quite yet... why not make the first one?</div>
         )}
         <Rail title="FEATURED" puzzles={data.featured} onPlay={onPlay} onCreator={onCreator} />
         <Rail
@@ -132,12 +137,13 @@ export default function HomePage({ onPlay, onCreator }: HomePageProps) {
               {data.leaders.map((entry, i) => (
                 <li key={entry.username} className={`leader-row rank-${i + 1}`}>
                   <span className="leader-rank">{i + 1}</span>
-                  <button
+                  <a
                     className="leader-name"
-                    onClick={() => onCreator?.(entry.username)}
+                    href={profilePath(entry.username)}
+                    onClick={e => linkClick(e, () => onCreator?.(entry.username))}
                   >
                     {entry.username}
-                  </button>
+                  </a>
                   <span className="leader-solves">
                     {entry.solves}
                     {entry.first_solves > 0 && (

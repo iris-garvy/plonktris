@@ -1,378 +1,373 @@
-import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import './App.css';
-import { usePlonkyProver } from './usePlonkyProver';
-import TetrisBoard, { type QueueView } from './components/TetrisBoard';
-import ProofPanel from './components/ProofPanel';
-import RequirementsModal from './components/RequirementsModal';
-import GameBoard from './components/GameBoard';
-import QueueEditor from './components/QueueEditor';
 import HomePage from './components/HomePage';
 import SearchPage from './components/SearchPage';
 import ProfilePage from './components/ProfilePage';
 import AboutPage from './components/AboutPage';
 import AuthModal from './components/AuthModal';
 import KeybindingsModal from './components/KeybindingsModal';
-import { ArrowLeft, ChevronDown } from 'lucide-react';
-import { GearIcon, GlassIcon } from './components/icons';
-import { boardToUint8, movesToUint8, clearLines, PIECE_TYPES, BOARD_COLS, BOARD_ROWS, type Board, type CellPos, type SecretMoves } from './tetrisUtils';
-import { emptyLedger, requirementsMet, type Ledger, type Requirements } from './tetrisLedger';
+import PlayView from './components/PlayView';
+import CreateView, { type PublishedPuzzle } from './components/CreateView';
+import { GearIcon } from './components/icons';
+import {
+  api, ApiError, errorMessage, getCachedUser, getToken, setSession,
+  type Puzzle, type SolveResult, type User,
+} from './api';
 import { loadBindings, saveBindings, loadHandling, saveHandling, type Bindings, type Handling } from './keybindings';
-import { api, getToken, setToken, type Puzzle, type User } from './api';
+import { boardToBits, queueToApi } from './game/engine';
+import { linkClick, noFocus, profilePath, puzzlePath } from './puzzleInfo';
 
-const emptyBoard = (): Board =>
-  Array.from({ length: BOARD_ROWS }, () => new Array(BOARD_COLS).fill(0));
+// ---------------------------------------------------------------------------
+// routing: the URL is the source of truth for which view is showing
+// ---------------------------------------------------------------------------
 
-const REQ_NAMES = ['TSS', 'TSD', 'TST', 'TETRIS', 'PC', 'ATTACK', 'COMBO'];
+type Route =
+  | { view: 'home' }
+  | { view: 'search' }
+  | { view: 'create' }
+  | { view: 'about' }
+  | { view: 'profile'; username: string }
+  | { view: 'play'; id: string };
 
-type View = 'home' | 'search' | 'create' | 'play' | 'profile' | 'about';
-type Stage = 'edit' | 'solve';
-
-interface PlayPuzzle extends Puzzle {
-  boardRows: Board;
-  queueIds: number[];
+function parseRoute(path: string): Route | null {
+  const pathname = path.split(/[?#]/)[0].replace(/\/+$/, '') || '/';
+  if (pathname === '/') return { view: 'home' };
+  if (pathname === '/search') return { view: 'search' };
+  if (pathname === '/create') return { view: 'create' };
+  if (pathname === '/about') return { view: 'about' };
+  const m = pathname.match(/^\/([up])\/([^/]+)$/);
+  if (m) {
+    let arg: string;
+    try { arg = decodeURIComponent(m[2]); } catch { return null; }
+    return m[1] === 'u' ? { view: 'profile', username: arg } : { view: 'play', id: arg };
+  }
+  return null;
 }
 
-function requirementsProgress(requirements: Requirements, ledger: Ledger): string {
-  const counts = [
-    ledger.tss, ledger.tsd, ledger.tst, ledger.tetris,
-    ledger.pc, ledger.attack, ledger.maxCombo,
-  ];
-  const parts = requirements
-    .slice(0, 7)
-    .map((v, i) => (v > 0 ? `${REQ_NAMES[i]} ${counts[i]}/${v}` : null))
-    .filter(Boolean);
-  if (requirements[7]) parts.push('NO HOLD');
-  return parts.length ? parts.join(' · ') : 'no requirements';
+function initialRoute(): Route {
+  const r = parseRoute(window.location.pathname);
+  if (r) return r;
+  window.history.replaceState(null, '', '/');   // unknown path → home
+  return { view: 'home' };
 }
 
-function App() {
-  const { prove, isReady, isProving, error } = usePlonkyProver();
+const sameUser = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
-  // index
-  const [view, setView] = useState<View>('home');
-  const [profileUser, setProfileUser] = useState<string | null>(null);
+export default function App() {
+  const [route, setRoute] = useState<Route>(initialRoute);
+  // bumps on every navigation (remounts the search page so its URL filters are re-read)
+  const [navCount, setNavCount] = useState(0);
 
-  const [user, setUser] = useState<User | null>(null);
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
+  // ---- session ----
+  const [user, setUser] = useState<User | null>(getCachedUser);
+  // false only while we hold a token but don't know whose it is yet
+  const [sessionKnown, setSessionKnown] = useState(() => !getToken() || getCachedUser() != null);
 
   useEffect(() => {
-    if (!getToken()) return;
+    const token = getToken();
+    if (!token) return;
+    let cancelled = false;
     api.me()
-      .then(setUser)
-      .catch(() => setToken(null)); // stale token
+      .then(u => {
+        if (cancelled || getToken() !== token) return;
+        setUser(u);
+        setSession(token, u);
+      })
+      .catch(err => {
+        if (cancelled || getToken() !== token) return;
+        // only a rejected token logs you out — a sleepy/unreachable server shouldn't
+        if (err instanceof ApiError && err.status === 401) { setSession(null); setUser(null); }
+      })
+      .finally(() => { if (!cancelled) setSessionKnown(true); });
+    return () => { cancelled = true; };
   }, []);
 
-  // close the account dropdown on any outside click
-  useEffect(() => {
-    if (!showUserMenu) return;
-    function onClick(e: MouseEvent) {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-        setShowUserMenu(false);
-      }
-    }
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, [showUserMenu]);
+  const [authModal, setAuthModal] = useState<{ reason: string | null } | null>(null);
+  const afterAuthRef = useRef<((u: User) => void) | null>(null);
 
-  function handleLogout() {
-    api.logout().catch(() => {});
-    setToken(null);
+  const closeAuth = useCallback(() => {
+    afterAuthRef.current = null;
+    setAuthModal(null);
+  }, []);
+
+  function openLogin(reason: string | null = null) {
+    afterAuthRef.current = null;
+    setAuthModal({ reason });
+  }
+
+  /** Runs `then` with the logged-in user — straight away, or right after they log in. */
+  function requireAuth(then: (u: User) => void, reason: string) {
+    if (user) { then(user); return; }
+    afterAuthRef.current = then;
+    setAuthModal({ reason });
+  }
+
+  function handleAuthed(u: User) {
+    setUser(u);
+    setSessionKnown(true);
+    setAuthModal(null);
+    const then = afterAuthRef.current;
+    afterAuthRef.current = null;
+    then?.(u);
+  }
+
+  function handleAuthExpired() {
+    setSession(null);
     setUser(null);
   }
 
-  // create mode
-  const [board, setBoard] = useState<Board>(emptyBoard);
-  const [queue, setQueue] = useState<number[]>([1, 2, 3, 4, 5, 6, 7]);
-  const [requirements, setRequirements] = useState<Requirements>([0, 0, 0, 0, 0, 0, 0, 0]);
-  const [puzzleName, setPuzzleName] = useState('');
-  const [stage, setStage] = useState<Stage>('edit');
-
-  // client-side ("secure") proving preference (per-device)
-  const [secureProving, setSecureProving] = useState<boolean>(
-    () => localStorage.getItem('plonktris-secure-proving') === '1'
-  );
-  function handleSecureProvingChange(v: boolean) {
-    setSecureProving(v);
-    localStorage.setItem('plonktris-secure-proving', v ? '1' : '0');
+  function handleLogout() {
+    api.logout().catch(() => {});   // reads the token synchronously, before it's cleared below
+    setSession(null);
+    setUser(null);
   }
 
-  // server-side fast-proving rate limit hit → offer in-browser proving instead
-  const [rateLimited, setRateLimited] = useState(false);
-
-  // warn before leaving during an in-browser proof (it dies if the tab closes)
-  const [secureProvingActive, setSecureProvingActive] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!secureProvingActive) return;
-    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [secureProvingActive]);
-
-  const [playPuzzle, setPlayPuzzle] = useState<PlayPuzzle | null>(null);
-
-  // solve/play
-  const [queueView, setQueueView] = useState<QueueView>({ current: null, nextIdx: 0 });
-  const [ledger, setLedger] = useState<Ledger>(emptyLedger);
-  const [secretMoves, setSecretMoves] = useState<SecretMoves | null>(null);
-  const [proof, setProof] = useState<unknown>(null);
-  const [proofError, setProofError] = useState<unknown>(null);
-
-  const [showReqModal, setShowReqModal] = useState(false);
-  const [reqsConfirmed, setReqsConfirmed] = useState(false);
-
-  // leaving create while solving resets it back to edit mode
-  useEffect(() => {
-    if (view !== 'create') {
-      setStage('edit');
-      setReqsConfirmed(false);
+    if (!showUserMenu) return;
+    function onDown(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setShowUserMenu(false);
     }
-  }, [view]);
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setShowUserMenu(false); }
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [showUserMenu]);
 
-  const [keys, setKeys] = useState<Bindings>(loadBindings);
+  // ---- settings ----
+  const [bindings, setBindings] = useState<Bindings>(loadBindings);
   const [handling, setHandling] = useState<Handling>(loadHandling);
-  const [showKeysModal, setShowKeysModal] = useState(false);
-
-  function handleKeysChange(next: Bindings) { setKeys(next); saveBindings(next); }
+  const [showSettings, setShowSettings] = useState(false);
+  function handleBindingsChange(next: Bindings) { setBindings(next); saveBindings(next); }
   function handleHandlingChange(next: Handling) { setHandling(next); saveHandling(next); }
 
-  function resetRunState() {
-    setLedger(emptyLedger());
-    setSecretMoves(null);
-    setProof(null);
-    setProofError(null);
-  }
+  // ---- the puzzle being played ----
+  const [playPuzzle, setPlayPuzzle] = useState<Puzzle | null>(null);
+  const [playError, setPlayError] = useState<{ id: string; message: string; notFound: boolean } | null>(null);
+  const [playFetch, setPlayFetch] = useState(0);   // bump to refetch
+  const [justPublished, setJustPublished] = useState<string | null>(null);
 
-  // ---- routing ----
-  // State-only view transitions (no URL change). Shared by the nav handlers (which also
-  // push a URL) and by URL restoration (initial load + back/forward), so both paths agree.
-  function showHome()   { resetRunState(); setPlayPuzzle(null); setView('home'); }
-  function showSearch() { resetRunState(); setPlayPuzzle(null); setView('search'); }
-  function showCreate() { resetRunState(); setPlayPuzzle(null); setView('create'); }
-  function showAbout()  { resetRunState(); setPlayPuzzle(null); setView('about'); }
-  function showProfile(username: string) {
-    resetRunState(); setPlayPuzzle(null); setProfileUser(username); setView('profile');
-  }
-  function showPlay(puzzle: Puzzle) {
-    // server formats → frontend formats: occupancy bits → gray cells,
-    // prover piece ids 0-6 → frontend ids 1-7
-    const rows = Array.from({ length: BOARD_ROWS }, (_, r) =>
-      Array.from({ length: BOARD_COLS }, (_, c) =>
-        puzzle.board[r * BOARD_COLS + c] ? 8 : 0
-      )
-    );
-    setPlayPuzzle({ ...puzzle, boardRows: rows, queueIds: puzzle.queue.map(id => id + 1) });
-    resetRunState();
-    setView('play');
-    // record the open for difficulty stats (logged-in only; idempotent server-side, fire-and-forget)
-    if (getToken()) api.recordAttempt(puzzle.id).catch(() => {});
-  }
-
-  function pushPath(path: string) {
-    if (window.location.pathname !== path) window.history.pushState({}, '', path);
-  }
-
-  // Nav handlers used by the UI. While an in-browser proof is running we refuse to navigate
-  // (the proof lives in this tab and dies if we tear the page down).
-  function gotoHome()   { if (secureProvingActive) return; pushPath('/');       showHome(); }
-  function gotoSearch() { if (secureProvingActive) return; pushPath('/search'); showSearch(); }
-  function gotoCreate() { if (secureProvingActive) return; pushPath('/create'); showCreate(); }
-  function gotoAbout()  { if (secureProvingActive) return; pushPath('/about');  showAbout(); }
-  function gotoProfile(username: string) {
-    if (secureProvingActive) return;
-    pushPath('/u/' + encodeURIComponent(username)); showProfile(username);
-  }
-  function openPlay(puzzle: Puzzle) {
-    if (secureProvingActive) return;
-    pushPath('/p/' + puzzle.id); showPlay(puzzle);
-  }
-
-  // Restore the view from the URL: initial page load and browser back/forward.
-  function applyRoute(path: string) {
-    if (path === '/search') showSearch();
-    else if (path === '/create') showCreate();
-    else if (path === '/about') showAbout();
-    else if (path.startsWith('/u/')) showProfile(decodeURIComponent(path.slice(3)));
-    else if (path.startsWith('/p/')) {
-      api.getPuzzle(path.slice(3)).then(showPlay).catch(() => { showHome(); pushPath('/'); });
-    } else showHome();
-  }
-
-  // adopt the path we loaded at (refresh / shared link), then track back/forward
+  const playId = route.view === 'play' ? route.id : null;
+  const userId = user?.id;
+  // (re)load the puzzle on open, on login/logout (solved_by_me), and after a solve (counts)
   useEffect(() => {
-    applyRoute(window.location.pathname);
-    const onPop = () => applyRoute(window.location.pathname);
+    if (playId == null) return;
+    let cancelled = false;
+    api.getPuzzle(playId)
+      .then(p => { if (!cancelled) setPlayPuzzle(p); })
+      .catch(err => {
+        if (cancelled) return;
+        const notFound = err instanceof ApiError && (err.status === 404 || err.status === 400);
+        setPlayError({ id: playId, message: errorMessage(err), notFound });
+      });
+    return () => { cancelled = true; };
+  }, [playId, userId, playFetch]);
+
+  const currentPuzzle = playPuzzle && playPuzzle.id === playId ? playPuzzle : null;
+
+  // ---- navigation ----
+  const changeRoute = useCallback((r: Route) => {
+    setRoute(r);
+    setNavCount(c => c + 1);
+    setShowUserMenu(false);
+    setPlayError(null);   // a fresh attempt at loading whatever puzzle comes next
+    closeAuth();
+    // the share banner only shows on the puzzle you just published
+    setJustPublished(id => (r.view === 'play' && r.id === id ? id : null));
+  }, [closeAuth]);
+
+  const navigate = useCallback((path: string) => {
+    if (path !== window.location.pathname + window.location.search) {
+      window.history.pushState(null, '', path);
+    }
+    changeRoute(parseRoute(path) ?? { view: 'home' });
+    window.scrollTo(0, 0);
+  }, [changeRoute]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const r = parseRoute(window.location.pathname);
+      if (!r) window.history.replaceState(null, '', '/');
+      changeRoute(r ?? { view: 'home' });
+    };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [changeRoute]);
 
-  const handleCellToggle = useCallback((row: number, col: number, value: number) => {
-    setBoard(prev => {
-      const next = prev.map(r => [...r]);
-      next[row][col] = value ?? 0;
-      return clearLines(next);
+  function openPuzzle(p: Puzzle) {
+    setPlayPuzzle(p);   // show it right away; the effect above refreshes it
+    navigate(puzzlePath(p.id));
+  }
+  function gotoProfile(username: string) { navigate(profilePath(username)); }
+
+  function handleSolved(id: string, res: SolveResult) {
+    setPlayPuzzle(prev => (prev && prev.id === id
+      ? { ...prev, solve_count: res.solve_count, solved_by_me: prev.solved_by_me || res.new_solve }
+      : prev));
+    setPlayFetch(n => n + 1);
+  }
+
+  function handlePublished(p: PublishedPuzzle) {
+    setPlayPuzzle({
+      id: p.id,
+      name: p.name,
+      creator: p.creator,
+      board: boardToBits(p.spec.board),
+      queue: queueToApi(p.spec.queue),
+      requirements: [...p.spec.requirements],
+      num_pieces: p.spec.queue.length,
+      solve_count: 0,
+      attempt_count: 0,
+      solved_by_me: false,
     });
-  }, []);
-
-  function handleEditPiecePlaced(placedCells: CellPos[], pieceId: number) {
-    setBoard(prev => {
-      const next = prev.map(r => [...r]);
-      for (const { row, col } of placedCells) next[row][col] = pieceId;
-      return clearLines(next);
-    });
+    setJustPublished(p.id);
+    navigate(puzzlePath(p.id));
   }
 
-  function handleStartSolving() {
-    if (queue.length === 0) return;
-    // always start the requirements modal fresh at 0
-    setRequirements([0, 0, 0, 0, 0, 0, 0, 0]);
-    setShowReqModal(true);
-  }
+  // ---- document title ----
+  const puzzleName = currentPuzzle?.name;
+  useEffect(() => {
+    let t = 'plonktris';
+    if (route.view === 'play' && puzzleName) t = `${puzzleName} · plonktris`;
+    else if (route.view === 'profile') t = `${route.username} · plonktris`;
+    else if (route.view !== 'home' && route.view !== 'play') t = `${route.view} · plonktris`;
+    document.title = t;
+  }, [route, puzzleName]);
 
-  function handleReqModalSubmit() {
-    setShowReqModal(false);
-    setReqsConfirmed(true);
-    resetRunState();
-    setStage('solve');
-  }
+  const modalOpen = authModal != null || showSettings;
+  const viewerKey = userId ?? 'anon';
 
-  function handleBackToEdit() {
-    resetRunState();
-    setReqsConfirmed(false);
-    setShowReqModal(false);
-    setStage('edit');
-  }
-
-  async function runProve(secure: boolean) {
-    if (!secretMoves) return;
-    // anonymous solves aren't recorded, so skip the prover entirely
-    if (view === 'play' && playPuzzle && !user) {
-      setProofError(null);
-      setProof({ localOnly: true });
-      return;
-    }
-    setProof(null);
-    setProofError(null);
-    setRateLimited(false);
-    // secure proving runs in-browser and dies if the tab closes — guard it
-    if (secure) setSecureProvingActive(true);
-    try {
-      let boardBytes: Uint8Array, queueBytes: Uint8Array, reqBytes: Uint8Array;
-      let extra: { puzzleId?: string; name?: string };
-      if (view === 'play' && playPuzzle) {
-        boardBytes = new Uint8Array(playPuzzle.board);
-        queueBytes = new Uint8Array(playPuzzle.queue);
-        reqBytes   = new Uint8Array(playPuzzle.requirements);
-        extra = { puzzleId: playPuzzle.id };
+  // ---- views ----
+  let main;
+  switch (route.view) {
+    case 'home':
+      main = <HomePage key={viewerKey} onPlay={openPuzzle} onCreator={gotoProfile} />;
+      break;
+    case 'search':
+      main = (
+        <SearchPage
+          key={navCount}
+          onPlay={openPuzzle}
+          onCreator={gotoProfile}
+          loggedIn={!!user}
+          viewerKey={viewerKey}
+        />
+      );
+      break;
+    case 'about':
+      main = (
+        <AboutPage
+          onBrowse={() => navigate('/')}
+          onCreate={() => navigate('/create')}
+          onOpenSettings={() => setShowSettings(true)}
+        />
+      );
+      break;
+    case 'profile':
+      main = (
+        <ProfilePage
+          key={`${route.username}|${viewerKey}`}
+          username={route.username}
+          onPlay={openPuzzle}
+          onCreator={gotoProfile}
+          isOwner={!!user && sameUser(user.username, route.username)}
+          onOpenSettings={() => setShowSettings(true)}
+          onCreate={() => navigate('/create')}
+        />
+      );
+      break;
+    case 'create':
+      main = (
+        <CreateView
+          user={user}
+          bindings={bindings}
+          handling={handling}
+          inputBlocked={modalOpen}
+          requireAuth={requireAuth}
+          onAuthExpired={handleAuthExpired}
+          onPublished={handlePublished}
+        />
+      );
+      break;
+    case 'play':
+      if (currentPuzzle) {
+        main = (
+          <PlayView
+            key={currentPuzzle.id}
+            puzzle={currentPuzzle}
+            user={user}
+            bindings={bindings}
+            handling={handling}
+            inputBlocked={modalOpen}
+            justPublished={justPublished === currentPuzzle.id
+              && !!user && user.username.toLowerCase() === currentPuzzle.creator?.toLowerCase()}
+            onLogin={() => openLogin('log in to save this solve')}
+            onAuthExpired={handleAuthExpired}
+            onSolved={handleSolved}
+            onOpenPuzzle={openPuzzle}
+            onNavigate={navigate}
+          />
+        );
+      } else if (playError && playError.id === route.id) {
+        main = (
+          <div className="view-status">
+            <div className="browse-error">
+              {playError.notFound ? "this puzzle doesn't exist (or was removed)" : `couldn't load this puzzle: ${playError.message}`}
+            </div>
+            <div className="view-status-actions">
+              {!playError.notFound && (
+                <button className="ghost-btn" onClick={() => { setPlayError(null); setPlayFetch(n => n + 1); }}>
+                  try again
+                </button>
+              )}
+              <a className="ghost-btn" href="/" onClick={e => linkClick(e, () => navigate('/'))}>browse puzzles</a>
+            </div>
+          </div>
+        );
       } else {
-        boardBytes = boardToUint8(board);
-        queueBytes = new Uint8Array(queue.map(id => id - 1));
-        reqBytes   = new Uint8Array(requirements);
-        extra = { name: puzzleName || 'untitled' };
+        main = <div className="view-status">loading puzzle…</div>;
       }
-      const movesBytes = movesToUint8(secretMoves);
-      const result = await prove(boardBytes, queueBytes, reqBytes, movesBytes, secure ? 'browser' : 'server', extra);
-      // server hit the per-user fast-proving limit → offer secure proving instead
-      if (result && (result as { rateLimited?: boolean }).rateLimited) {
-        setRateLimited(true);
-      } else {
-        setProof(result);
-      }
-    } catch (e) {
-      setProofError(e);
-    } finally {
-      setSecureProvingActive(false);
-    }
+      break;
   }
 
-  function handleProveClick(secure: boolean) {
-    if (!secretMoves) return;
-    // publishing is gated behind login; anonymous solving is fine (unrecorded)
-    if (view === 'create' && !user) {
-      setShowAuthModal(true);
-      return;
-    }
-    runProve(secure);
-  }
-
-  const activeQueue = view === 'play' ? (playPuzzle?.queueIds ?? []) : queue;
-  const activeReqs = view === 'play' ? playPuzzle?.requirements : requirements;
-  const reqsDone   = activeReqs ? requirementsMet(ledger, activeReqs) : false;
-  const showProgress = view === 'play' || reqsConfirmed;
-  const reqSummary = showProgress && activeReqs ? requirementsProgress(activeReqs, ledger) : null;
+  const tab = (path: string, label: string, active: boolean) => (
+    <a
+      href={path}
+      className={`stage-tab${active ? ' active' : ''}`}
+      aria-current={active ? 'page' : undefined}
+      onClick={e => linkClick(e, () => navigate(path))}
+    >
+      {label}
+    </a>
+  );
 
   return (
     <div className="app">
       <header className="app-header">
-        <button className="logo-group" onClick={gotoHome} disabled={secureProvingActive} title={secureProvingActive ? 'proof in progress…' : 'Home'}>
+        <a className="logo-group" href="/" title="home" onClick={e => linkClick(e, () => navigate('/'))}>
           <img className="logo-mark" src="/logo.svg" alt="" />
           <span className="logo-word">lonktris</span>
-        </button>
+        </a>
 
         <nav className="view-tabs">
-          <button
-            className={`stage-tab ${view === 'search' ? 'active' : ''}`}
-            onClick={gotoSearch}
-            disabled={secureProvingActive}
-            title={secureProvingActive ? 'proof in progress…' : undefined}
-          >
-            search
-          </button>
-          <button
-            className={`stage-tab ${view === 'create' ? 'active' : ''}`}
-            onClick={gotoCreate}
-            disabled={secureProvingActive}
-            title={secureProvingActive ? 'proof in progress…' : undefined}
-          >
-            create
-          </button>
-          <button
-            className={`stage-tab ${view === 'about' ? 'active' : ''}`}
-            onClick={gotoAbout}
-            disabled={secureProvingActive}
-            title={secureProvingActive ? 'proof in progress…' : undefined}
-          >
-            about
-          </button>
+          {tab('/search', 'search', route.view === 'search')}
+          {tab('/create', 'create', route.view === 'create')}
+          {tab('/about', 'about', route.view === 'about')}
         </nav>
 
-        {view === 'play' && playPuzzle && (
-          <div className="play-board-title">
-            <span className="play-board-name">{playPuzzle.name}</span>
-            <span className="play-board-creator">
-              by{' '}
-              {playPuzzle.creator ? (
-                <button className="creator-link" onClick={() => gotoProfile(playPuzzle.creator!)}>
-                  {playPuzzle.creator}
-                </button>
-              ) : 'anonymous'}
-            </span>
-          </div>
-        )}
-
-        <div className="stage-tabs">
-          {/* prove/edit and keybindings are always rendered (just made inert + invisible when
-              they don't apply) so the header keeps a constant footprint and doesn't shift when
-              switching views — e.g. create <-> about. */}
+        <div className="header-actions">
           <button
-            className={`stage-tab create-stage${view === 'create' ? '' : ' inactive'}`}
-            onClick={view !== 'create' ? undefined : (stage === 'edit' ? handleStartSolving : handleBackToEdit)}
-            disabled={view === 'create' && stage === 'edit' && queue.length === 0}
-            tabIndex={view === 'create' ? 0 : -1}
-            aria-hidden={view !== 'create'}
-          >
-            {view === 'create' && stage === 'solve'
-              ? <><ArrowLeft className="glyph-icon glyph-lead" />edit</>
-              : <><GlassIcon className="btn-icon" />prove</>}
-          </button>
-          <button
-            className={`keys-open-btn${(view === 'play' || view === 'create') ? '' : ' inactive'}`}
-            onClick={(view === 'play' || view === 'create') ? () => setShowKeysModal(true) : undefined}
-            tabIndex={(view === 'play' || view === 'create') ? 0 : -1}
-            aria-hidden={!(view === 'play' || view === 'create')}
-            title="Keybindings"
+            type="button"
+            className="icon-btn"
+            onMouseDown={noFocus}
+            onClick={() => setShowSettings(true)}
+            title="settings — controls & handling"
+            aria-label="settings"
           >
             <GearIcon className="btn-icon" />
           </button>
@@ -380,23 +375,31 @@ function App() {
           {user ? (
             <div className="user-menu" ref={userMenuRef}>
               <button
+                type="button"
                 className={`user-name ${showUserMenu ? 'open' : ''}`}
+                onMouseDown={noFocus}
                 onClick={() => setShowUserMenu(v => !v)}
-                title="Account"
+                aria-haspopup="menu"
+                aria-expanded={showUserMenu}
+                title="account"
               >
                 {user.username}
                 <span className="user-caret"><ChevronDown className="glyph-icon" /></span>
               </button>
               {showUserMenu && (
-                <div className="user-dropdown">
-                  <button
+                <div className="user-dropdown" role="menu">
+                  <a
                     className="user-dropdown-item"
-                    onClick={() => { setShowUserMenu(false); gotoProfile(user.username); }}
+                    role="menuitem"
+                    href={profilePath(user.username)}
+                    onClick={e => linkClick(e, () => gotoProfile(user.username))}
                   >
                     profile
-                  </button>
+                  </a>
                   <button
+                    type="button"
                     className="user-dropdown-item"
+                    role="menuitem"
                     onClick={() => { setShowUserMenu(false); handleLogout(); }}
                   >
                     log out
@@ -404,165 +407,31 @@ function App() {
                 </div>
               )}
             </div>
-          ) : (
-            <button className="login-btn" onClick={() => setShowAuthModal(true)}>
+          ) : sessionKnown ? (
+            <button type="button" className="login-btn" onMouseDown={noFocus} onClick={() => openLogin()}>
               log in
             </button>
+          ) : (
+            <span className="login-btn placeholder" aria-hidden="true">log in</span>
           )}
         </div>
       </header>
 
-      {view === 'home' ? (
-        <main className="app-main browse-main">
-          <HomePage onPlay={openPlay} onCreator={gotoProfile} />
-        </main>
-      ) : view === 'about' ? (
-        <main className="app-main browse-main">
-          <AboutPage onBrowse={gotoHome} onCreate={gotoCreate} />
-        </main>
-      ) : view === 'search' ? (
-        <main className="app-main browse-main">
-          <SearchPage onPlay={openPlay} onCreator={gotoProfile} />
-        </main>
-      ) : view === 'profile' && profileUser ? (
-        <main className="app-main browse-main">
-          <ProfilePage
-            username={profileUser}
-            onPlay={openPlay}
-            onCreator={gotoProfile}
-            isOwner={!!user && user.username.toLowerCase() === profileUser.toLowerCase()}
-            secureProving={secureProving}
-            onSecureProvingChange={handleSecureProvingChange}
-            bindings={keys}
-            onBindingsChange={handleKeysChange}
-            handling={handling}
-            onHandlingChange={handleHandlingChange}
-          />
-        </main>
-      ) : (
-        <main className="app-main">
-          {/* LEFT (spacer keeps the board centered) */}
-          <aside className="sidebar sidebar-left" />
+      <main className={`app-main view-${route.view}`}>{main}</main>
 
-          {/* CENTER: board (action block renders under the hold box) */}
-          <section className="board-section">
-            {/* mobile-only: compact hold + queue chips in place of the full-size side panels */}
-            <div className="mobile-queue-strip" aria-hidden="true">
-              <span className="mqs-chip mqs-hold" title="hold" />
-              <span className="mqs-sep" />
-              {activeQueue.map((id, i) => (
-                <span
-                  key={i}
-                  className="mqs-chip"
-                  style={{ '--pc': PIECE_TYPES[id]?.color ?? '#999' } as CSSProperties}
-                >
-                  {PIECE_TYPES[id]?.name ?? '?'}
-                </span>
-              ))}
-            </div>
-            {view === 'create' && stage === 'edit' ? (
-              <TetrisBoard
-                board={board}
-                onCellToggle={handleCellToggle}
-                onPiecePlaced={handleEditPiecePlaced}
-                onBoardSet={setBoard}
-                onQueueView={setQueueView}
-                queue={queue}
-                keys={keys}
-                handling={handling}
-                sidePanel={
-                  <button
-                    className="start-solving-btn"
-                    onClick={handleStartSolving}
-                    disabled={queue.length === 0}
-                  >
-                    <GlassIcon className="btn-icon glass-nudge" />prove
-                  </button>
-                }
-              />
-            ) : (
-              <GameBoard
-                key={view === 'play' ? playPuzzle?.id : 'create-solve'}
-                initialBoard={view === 'play' && playPuzzle ? playPuzzle.boardRows : board}
-                queue={view === 'play' && playPuzzle ? playPuzzle.queueIds : queue}
-                onComplete={setSecretMoves}
-                onQueueView={setQueueView}
-                onLedger={setLedger}
-                reqText={reqSummary}
-                reqsDone={reqsDone}
-                noHold={!!activeReqs?.[7]}
-                keys={keys}
-                handling={handling}
-                sidePanel={
-                  <>
-                    <ProofPanel
-                      isReady={isReady}
-                      isProving={isProving}
-                      error={error || proofError}
-                      proof={proof}
-                      onProve={handleProveClick}
-                      disabled={!secretMoves || !reqsDone}
-                      allowSecure={secureProving}
-                      rateLimited={rateLimited}
-                    />
-                    {secretMoves && !reqsDone && (
-                      <div className="solve-hint">
-                        conditions not met! try again!
-                      </div>
-                    )}
-                    {secretMoves && reqsDone && !user && (
-                      <div className="solve-hint">
-                        {view === 'play'
-                          ? 'log in to record your solve'
-                          : 'log in to publish your puzzle'}
-                      </div>
-                    )}
-                  </>
-                }
-              />
-            )}
-          </section>
-
-          {/* RIGHT: the queue */}
-          <aside className="sidebar sidebar-right">
-            <QueueEditor
-              queue={view === 'play' && playPuzzle ? playPuzzle.queueIds : queue}
-              onQueueChange={view === 'create' && stage === 'edit' ? setQueue : undefined}
-              nextIdx={queueView.nextIdx}
-            />
-          </aside>
-        </main>
+      {authModal && (
+        <AuthModal reason={authModal.reason} onAuthed={handleAuthed} onClose={closeAuth} />
       )}
 
-      {showAuthModal && (
-        <AuthModal
-          onAuthed={setUser}
-          onClose={() => setShowAuthModal(false)}
-        />
-      )}
-
-      {showKeysModal && (
+      {showSettings && (
         <KeybindingsModal
-          bindings={keys}
-          onChange={handleKeysChange}
+          bindings={bindings}
+          onChange={handleBindingsChange}
           handling={handling}
           onHandlingChange={handleHandlingChange}
-          onClose={() => setShowKeysModal(false)}
-        />
-      )}
-
-      {showReqModal && (
-        <RequirementsModal
-          requirements={requirements}
-          onChange={setRequirements}
-          name={puzzleName}
-          onNameChange={setPuzzleName}
-          onSubmit={handleReqModalSubmit}
-          onCancel={() => setShowReqModal(false)}
+          onClose={() => setShowSettings(false)}
         />
       )}
     </div>
   );
 }
-
-export default App;

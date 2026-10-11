@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { api, type Puzzle, type PuzzleFilters, type ReqFilter } from '../api';
+import { api, errorMessage, type Puzzle, type PuzzleFilters, type ReqFilter } from '../api';
+import { MAX_QUEUE } from '../puzzleInfo';
 import PuzzleCard from './PuzzleCard';
 import './BrowsePage.css';
 import './SearchPage.css';
@@ -8,6 +9,10 @@ import './SearchPage.css';
 interface SearchPageProps {
   onPlay: (puzzle: Puzzle) => void;
   onCreator?: (username: string) => void;
+  /** logged in: offers "hide ones I've solved" */
+  loggedIn: boolean;
+  /** changes when the viewer logs in/out, so `solved_by_me` gets refreshed */
+  viewerKey: string;
 }
 
 type SortOption = 'new' | 'solves';
@@ -20,22 +25,65 @@ const REQ_OPTIONS: { key: ReqFilter; label: string }[] = [
   { key: 'combo',  label: 'Combo' },
   { key: 'nohold', label: 'No Hold' },
 ];
+const REQ_KEYS = new Set<string>(REQ_OPTIONS.map(o => o.key));
 
-export default function SearchPage({ onPlay, onCreator }: SearchPageProps) {
-  const [q, setQ] = useState('');
-  const [minPieces, setMinPieces] = useState('');
-  const [maxPieces, setMaxPieces] = useState('');
-  const [unsolved, setUnsolved] = useState(false);
-  const [reqs, setReqs] = useState<ReqFilter[]>([]);
+interface SearchState {
+  q: string;
+  minPieces: string;
+  maxPieces: string;
+  unsolved: boolean;
+  hideMine: boolean;
+  reqs: ReqFilter[];
+  sort: SortOption;
+}
+
+// filters live in the URL (/search?q=…&reqs=tspin), so back/forward and refresh keep them
+function readUrl(): SearchState {
+  const p = new URLSearchParams(window.location.search);
+  return {
+    q: p.get('q') ?? '',
+    minPieces: p.get('min') ?? '',
+    maxPieces: p.get('max') ?? '',
+    unsolved: p.get('unsolved') === '1',
+    hideMine: p.get('hide_solved') === '1',
+    reqs: (p.get('reqs') ?? '').split(',').filter((r): r is ReqFilter => REQ_KEYS.has(r)),
+    sort: p.get('sort') === 'solves' ? 'solves' : 'new',
+  };
+}
+
+function writeUrl(s: SearchState) {
+  const p = new URLSearchParams();
+  if (s.q.trim()) p.set('q', s.q.trim());
+  if (s.minPieces) p.set('min', s.minPieces);
+  if (s.maxPieces) p.set('max', s.maxPieces);
+  if (s.unsolved) p.set('unsolved', '1');
+  if (s.hideMine) p.set('hide_solved', '1');
+  if (s.reqs.length) p.set('reqs', s.reqs.join(','));
+  if (s.sort !== 'new') p.set('sort', s.sort);
+  const qs = p.toString();
+  const next = `/search${qs ? `?${qs}` : ''}`;
+  if (window.location.pathname === '/search' && window.location.pathname + window.location.search !== next) {
+    window.history.replaceState(window.history.state, '', next);
+  }
+}
+
+export default function SearchPage({ onPlay, onCreator, loggedIn, viewerKey }: SearchPageProps) {
+  const [state, setState] = useState<SearchState>(readUrl);
+  const { q, minPieces, maxPieces, unsolved, hideMine, reqs, sort } = state;
   const [reqsOpen, setReqsOpen] = useState(false);
-  const [sort, setSort] = useState<SortOption>('new');
 
   const [results, setResults] = useState<Puzzle[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function toggleReq(key: ReqFilter) {
-    setReqs(prev => prev.includes(key) ? prev.filter(r => r !== key) : [...prev, key]);
+  function update(patch: Partial<SearchState>) {
+    setState(prev => ({ ...prev, ...patch }));
   }
+
+  function toggleReq(key: ReqFilter) {
+    update({ reqs: reqs.includes(key) ? reqs.filter(r => r !== key) : [...reqs, key] });
+  }
+
+  useEffect(() => { writeUrl(state); }, [state]);
 
   // debounce so typing / nudging numbers doesn't hammer the server
   useEffect(() => {
@@ -50,23 +98,24 @@ export default function SearchPage({ onPlay, onCreator }: SearchPageProps) {
       if (unsolved) filters.solved = 'unsolved';
       if (reqs.length) filters.reqs = reqs;
 
-      setError(null);
       api.listPuzzles(filters)
-        .then(({ puzzles }) => { if (!cancelled) setResults(puzzles); })
-        .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : String(err)); });
+        .then(({ puzzles }) => { if (!cancelled) { setError(null); setResults(puzzles); } })
+        .catch(err => { if (!cancelled) setError(errorMessage(err)); });
     }, 250);
     return () => { cancelled = true; clearTimeout(handle); };
-  }, [q, minPieces, maxPieces, unsolved, reqs, sort]);
+  }, [q, minPieces, maxPieces, unsolved, reqs, sort, viewerKey]);
+
+  const shown = results && loggedIn && hideMine ? results.filter(p => !p.solved_by_me) : results;
 
   return (
     <div className="search-page">
       <div className="search-bar">
         <input
           className="search-input"
-          type="text"
+          type="search"
           placeholder="search puzzles by name…"
           value={q}
-          onChange={e => setQ(e.target.value)}
+          onChange={e => update({ q: e.target.value })}
           autoFocus
         />
       </div>
@@ -75,13 +124,13 @@ export default function SearchPage({ onPlay, onCreator }: SearchPageProps) {
         <label className="filter">
           <span className="filter-label">pieces</span>
           <input
-            className="filter-num" type="number" min={1} max={25} placeholder="min"
-            value={minPieces} onChange={e => setMinPieces(e.target.value)}
+            className="filter-num" type="number" min={1} max={MAX_QUEUE} placeholder="min"
+            value={minPieces} onChange={e => update({ minPieces: e.target.value })}
           />
           <span className="filter-dash">–</span>
           <input
-            className="filter-num" type="number" min={1} max={25} placeholder="max"
-            value={maxPieces} onChange={e => setMaxPieces(e.target.value)}
+            className="filter-num" type="number" min={1} max={MAX_QUEUE} placeholder="max"
+            value={maxPieces} onChange={e => update({ maxPieces: e.target.value })}
           />
         </label>
 
@@ -91,6 +140,7 @@ export default function SearchPage({ onPlay, onCreator }: SearchPageProps) {
             type="button"
             className="reqs-toggle"
             onClick={() => setReqsOpen(o => !o)}
+            aria-expanded={reqsOpen}
           >
             {reqs.length === 0 ? 'any' : `${reqs.length} selected`}<ChevronDown className="glyph-icon glyph-trail" />
           </button>
@@ -115,27 +165,34 @@ export default function SearchPage({ onPlay, onCreator }: SearchPageProps) {
 
         <label className="filter">
           <span className="filter-label">sort</span>
-          <select className="filter-select" value={sort} onChange={e => setSort(e.target.value as SortOption)}>
+          <select className="filter-select" value={sort} onChange={e => update({ sort: e.target.value as SortOption })}>
             <option value="new">newest</option>
             <option value="solves">most solved</option>
           </select>
         </label>
 
-        <label className="filter checkbox-filter">
-          <span className="filter-label">unsolved</span>
-          <input type="checkbox" checked={unsolved} onChange={e => setUnsolved(e.target.checked)} />
+        <label className="filter checkbox-filter" title="puzzles nobody has solved yet">
+          <span className="filter-label">unsolved by anyone</span>
+          <input type="checkbox" checked={unsolved} onChange={e => update({ unsolved: e.target.checked })} />
         </label>
+
+        {loggedIn && (
+          <label className="filter checkbox-filter">
+            <span className="filter-label">hide ones i've solved</span>
+            <input type="checkbox" checked={hideMine} onChange={e => update({ hideMine: e.target.checked })} />
+          </label>
+        )}
       </div>
 
       {error ? (
         <div className="browse-status"><div className="browse-error">{error}</div></div>
-      ) : results == null ? (
+      ) : shown == null ? (
         <div className="browse-status">searching…</div>
-      ) : results.length === 0 ? (
+      ) : shown.length === 0 ? (
         <div className="browse-status">no puzzles match your filters</div>
       ) : (
         <div className="browse-grid compact">
-          {results.map(p => (
+          {shown.map(p => (
             <PuzzleCard key={p.id} puzzle={p} onPlay={onPlay} onCreator={onCreator} compact />
           ))}
         </div>
