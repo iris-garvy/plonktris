@@ -1,0 +1,106 @@
+.play-view {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ── puzzle header: name, creator, solves, goals ── */
+.play-head {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  text-align: center;
+}
+
+.play-head-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  max-width: 100%;
+}
+
+.play-title {
+  font-family: var(--font-body);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: var(--pink);
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.solved-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--lavender);
+  border: 1px solid color-mix(in srgb, var(--lavender) 60%, transparent);
+  padding: 1px 5px;
+}
+
+.play-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+.play-meta-sep { opacity: 0.6; }
+
+.play-board {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* ── "published!" share banner ── */
+.publish-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  max-width: 100%;
+  background: var(--bg-panel);
+  border: 1px solid var(--pink);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.publish-banner-title { font-weight: 800; color: var(--pink); }
+.publish-banner-url {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: var(--bg-raised);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.publish-banner-copy {
+  display: inline-flex;
+  align-items: center;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--lavender);
+  color: var(--lavender);
+  cursor: pointer;
+}
+.publish-banner-copy:hover { background: rgba(181, 165, 255, 0.1); }

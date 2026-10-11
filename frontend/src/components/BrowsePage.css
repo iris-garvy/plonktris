@@ -100,7 +100,24 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-decoration: none;
 }
+.puzzle-name:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+.puzzle-preview-link { display: block; flex-shrink: 0; align-self: flex-start; line-height: 0; }
+.puzzle-card.compact .puzzle-preview-link { align-self: center; }
+
+/* puzzles the viewer has solved: a quiet check, and a calmer card */
+.puzzle-solved-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--lavender);
+  letter-spacing: 0.04em;
+}
+.puzzle-card.solved .preview-cell.on { background: #b3a7b1; }
 
 .puzzle-creator {
   font-size: 10px;
@@ -159,6 +176,8 @@
 }
 
 .puzzle-play-btn {
+  display: inline-block;
+  text-decoration: none;
   background: transparent;
   border: 1px solid var(--pink);
   color: var(--pink);
@@ -172,3 +191,29 @@
 }
 
 .puzzle-play-btn:hover { background: rgba(255, 189, 222, 0.1); }
+
+/* clickable creator name (cards, play header, leaderboard) */
+.creator-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--lavender);
+  cursor: pointer;
+  text-decoration: none;
+}
+.creator-link:hover { text-decoration: underline; }
+
+.browse-retry {
+  margin-top: 12px;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 5px 14px;
+  background: transparent;
+  border: 1px solid var(--pink);
+  color: var(--pink);
+  cursor: pointer;
+}
+.browse-retry:hover { background: rgba(255, 189, 222, 0.1); }

@@ -1,0 +1,290 @@
+/* PuzzlePlayer — everything scales from --cell (px per board cell, set inline from the
+   available width). Grid:
+     row 1: requirement chips (over the board)
+     row 2: labels | spawn strip (top of the canvas) | labels
+     row 3: hold column | well | next column
+     row 4: hint / touch controls under the board
+     row 5: 1fr — soaks up side columns taller than the board                              */
+.pp {
+  --side: calc(var(--cell) * 3.4);
+  --gap: calc(var(--cell) * 0.4);
+  display: grid;
+  grid-template-columns: var(--side) auto var(--side);
+  grid-template-rows: auto var(--cell) auto auto 1fr;
+  column-gap: var(--gap);
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pp-chips {
+  grid-area: 1 / 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px;
+  padding-bottom: 6px;
+  min-height: 26px;
+}
+
+.pp-chip {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 7px;
+  white-space: nowrap;
+  color: var(--pink);
+  border: 1px solid var(--pink-soft);
+  background: rgba(255, 189, 222, 0.12);
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.pp-chip b { font-weight: 700; margin-left: 2px; }
+.pp-chip.met {
+  color: var(--lavender);
+  border-color: var(--lavender-soft);
+  background: rgba(181, 165, 255, 0.16);
+}
+.pp-chip.met::after { content: ' \2713'; }
+.pp-chip.tag {
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  background: none;
+  text-transform: uppercase;
+}
+
+.pp-label {
+  align-self: end;
+  padding-bottom: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.pp-hold-label { grid-area: 2 / 1; }
+.pp-next-label { grid-area: 2 / 3; }
+
+.pp-left,
+.pp-right {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.pp-left  { grid-area: 3 / 1 / 6 / 2; }
+.pp-right { grid-area: 3 / 3 / 6 / 4; }
+
+/* hold */
+.pp-hold {
+  --mini-cell: calc(var(--cell) * 0.6);
+  height: calc(var(--cell) * 2.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+}
+.pp-hold.off {
+  background:
+    repeating-linear-gradient(135deg, transparent 0 6px, rgba(0, 0, 0, 0.035) 6px 7px),
+    var(--bg-raised);
+}
+.pp-hold-off {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+/* lock call-outs */
+.pp-callout {
+  min-height: calc(var(--cell) * 3.4);
+}
+.pp-callout-inner {
+  animation: pp-callout 1.7s ease-out forwards;
+}
+@keyframes pp-callout {
+  0%   { opacity: 0; transform: translateY(3px) scale(0.96); }
+  8%   { opacity: 1; transform: none; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.pp-callout-line {
+  font-size: clamp(9px, calc(var(--cell) * 0.46), 12px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+.pp-callout-line.spin   { color: #a000f0; }
+.pp-callout-line.tetris { color: #00a7b5; }
+.pp-callout-line.plain  { color: var(--text-muted); }
+.pp-callout-line.b2b,
+.pp-callout-line.combo  { color: var(--pink); }
+.pp-callout-line.pc     { color: var(--lavender); }
+.pp-callout-line.atk    { color: var(--text-muted); font-size: clamp(8px, calc(var(--cell) * 0.38), 10px); }
+
+.pp-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* board */
+.pp-board {
+  grid-area: 2 / 2 / 4 / 3;
+  position: relative;
+  justify-self: center;
+}
+.pp-overlay {
+  position: absolute;
+  inset: var(--cell) 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+.pp-overlay > * { pointer-events: auto; }
+.pp-banner {
+  position: absolute;
+  top: calc(var(--cell) * 2);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--pink);
+  background: var(--bg-panel);
+  border: 1px solid var(--pink);
+  padding: 4px 8px;
+}
+
+/* next queue */
+.pp-next {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  padding: calc(var(--cell) * 0.2) 0;
+}
+.pp-next-item {
+  --mini-cell: calc(var(--cell) * 0.55);
+  height: calc(var(--cell) * 2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pp-next-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 6px 0;
+}
+.pp-next-rest {
+  --mini-cell: calc(var(--cell) * 0.27);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--cell) * 0.25) calc(var(--cell) * 0.2);
+  margin: calc(var(--cell) * 0.15) 4px 0;
+  padding-top: calc(var(--cell) * 0.3);
+  border-top: 1px dashed var(--border);
+}
+
+.pp-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: clamp(8px, calc(var(--cell) * 0.38), 10px);
+  letter-spacing: 0.04em;
+}
+.pp-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  color: var(--text-muted);
+}
+.pp-stat b {
+  color: var(--text-dim);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* under the board */
+.pp-foot {
+  grid-area: 4 / 2;
+  padding-top: 8px;
+  min-width: 0;
+}
+.pp-warn {
+  font-size: 9px;
+  color: #d6336c;
+  text-align: center;
+  margin-bottom: 4px;
+}
+.pp-hint {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 10px;
+  font-size: 9px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  max-width: calc(var(--cell) * 10 + 4px);
+  margin: 0 auto;
+}
+.pp-hint-item { white-space: nowrap; }
+.pp-hint kbd {
+  font-family: inherit;
+  font-size: 9px;
+  color: var(--text-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  padding: 0 4px;
+}
+
+/* touch controls (coarse pointers): give them the full width under the board */
+.pp-coarse .pp-left,
+.pp-coarse .pp-right { grid-row: 3 / 4; }
+.pp-coarse .pp-foot { grid-column: 1 / -1; }
+.pp-touch {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+.pp .pp-touch-btn {
+  height: max(44px, calc(var(--cell) * 2.2));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: inherit;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.pp .pp-touch-btn svg { width: 20px; height: 20px; }
+.pp .pp-touch-btn:active { background: rgba(255, 189, 222, 0.25); border-color: var(--pink); color: var(--pink); }
+.pp .pp-touch-btn.primary { border-color: var(--pink); color: var(--pink); }
+.pp .pp-touch-btn:disabled { opacity: 0.35; }
+.pp-touch-text {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pp-callout-inner { animation-duration: 0.01s; animation-delay: 1.5s; }
+}

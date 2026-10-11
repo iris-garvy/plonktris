@@ -1,7 +1,11 @@
-# fly.toml app configuration file generated for plonktris-server on 2026-06-13T17:59:54-04:00
+# Fly.io config for the Plonktris API server.
 #
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+# The app is host-agnostic: a single stateless Docker image that needs DATABASE_URL (any
+# Postgres, e.g. a free Neon database with ?sslmode=require) and optionally ALLOWED_ORIGINS,
+# and listens on $PORT. Any Docker host works (Fly, Render, Railway, Koyeb, Cloud Run, ...);
+# this file is only used by `fly deploy`.
 #
+# Sized for ~zero cost: the smallest machine, stopped when idle and woken by the next request.
 
 app = 'plonktris-server'
 primary_region = 'iad'
@@ -10,17 +14,15 @@ primary_region = 'iad'
   dockerfile = 'Dockerfile'
 
 [env]
-  BIND_ADDR = '0.0.0.0:3000'
+  PORT = '3000'
 
 [http_service]
   internal_port = 3000
   force_https = true
-  auto_stop_machines = 'off'
+  auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
 
 [[vm]]
-  # proof generation peaks ~2GB; 4GB gives headroom. extra cpus speed up the
-  # parallel (rayon) prover.
-  size = 'shared-cpu-8x'
-  memory = '4gb'
+  size = 'shared-cpu-1x'
+  memory = '256mb'

@@ -1,24 +1,15 @@
-import type { CSSProperties } from 'react';
-import { PIECE_TYPES } from '../tetrisUtils';
+import type { CSSProperties, MouseEvent } from 'react';
+import { Check } from 'lucide-react';
+import { PIECE_NAMES } from '../game/engine';
 import type { Puzzle } from '../api';
+import { PIECE_COLORS } from '../game/colors';
+import { linkClick, profilePath, puzzlePath, requirementChips } from '../puzzleInfo';
 import './BrowsePage.css';
-
-const REQ_NAMES = ['TSS', 'TSD', 'TST', 'TETRIS', 'PC', 'ATTACK', 'COMBO'];
-const ID_TO_LETTER = ['I', 'O', 'T', 'S', 'Z', 'L', 'J']; // prover ids 0-6
-
-function reqChips(requirements: number[]): string[] {
-  const chips = requirements
-    .slice(0, 7)
-    .map((v, i) => (v > 0 ? `${REQ_NAMES[i]} ${v}` : null))
-    .filter((c): c is string => c !== null);
-  if (requirements[7]) chips.push('NO HOLD');
-  return chips;
-}
 
 // tiny 10x20 preview from the 210 occupancy bits (row 0 = hidden spawn row)
 function BoardPreview({ board }: { board: number[] }) {
   return (
-    <div className="puzzle-preview">
+    <div className="puzzle-preview" aria-hidden="true">
       {Array.from({ length: 20 }, (_, r) =>
         Array.from({ length: 10 }, (_, c) => (
           <div
@@ -40,17 +31,27 @@ interface PuzzleCardProps {
 }
 
 export default function PuzzleCard({ puzzle, onPlay, onCreator, compact }: PuzzleCardProps) {
+  const href = puzzlePath(puzzle.id);
+  const play = (e: MouseEvent) => linkClick(e, () => onPlay(puzzle));
   return (
-    <div className={`puzzle-card ${compact ? 'compact' : ''}`} onDoubleClick={() => onPlay(puzzle)}>
-      <BoardPreview board={puzzle.board} />
+    <div className={`puzzle-card ${compact ? 'compact' : ''}${puzzle.solved_by_me ? ' solved' : ''}`}>
+      <a href={href} onClick={play} className="puzzle-preview-link" tabIndex={-1} aria-hidden="true">
+        <BoardPreview board={puzzle.board} />
+      </a>
       <div className="puzzle-info">
-        <div className="puzzle-name">{puzzle.name}</div>
+        <a href={href} onClick={play} className="puzzle-name" title={puzzle.name}>
+          {puzzle.name}
+        </a>
         <div className="puzzle-creator">
           by{' '}
           {puzzle.creator && onCreator ? (
-            <button className="creator-link" onClick={() => onCreator(puzzle.creator!)}>
+            <a
+              className="creator-link"
+              href={profilePath(puzzle.creator)}
+              onClick={e => linkClick(e, () => onCreator(puzzle.creator!))}
+            >
               {puzzle.creator}
-            </button>
+            </a>
           ) : (
             puzzle.creator ?? 'anonymous'
           )}
@@ -61,15 +62,15 @@ export default function PuzzleCard({ puzzle, onPlay, onCreator, compact }: Puzzl
             <span
               key={i}
               className="puzzle-queue-chip"
-              style={{ '--pc': PIECE_TYPES[pid + 1]?.color ?? '#666' } as CSSProperties}
+              style={{ '--pc': PIECE_COLORS[pid + 1] ?? '#666' } as CSSProperties}
             >
-              {ID_TO_LETTER[pid] ?? '?'}
+              {PIECE_NAMES[pid + 1] ?? '?'}
             </span>
           ))}
         </div>
 
         <div className="puzzle-reqs">
-          {reqChips(puzzle.requirements).map((chip, i) => (
+          {requirementChips(puzzle.requirements).map((chip, i) => (
             <span key={i} className="puzzle-req-chip">{chip}</span>
           ))}
         </div>
@@ -81,9 +82,14 @@ export default function PuzzleCard({ puzzle, onPlay, onCreator, compact }: Puzzl
           <span className="puzzle-solves">
             {puzzle.num_pieces} piece{puzzle.num_pieces === 1 ? '' : 's'}
           </span>
-          <button className="puzzle-play-btn" onClick={() => onPlay(puzzle)}>
-            play
-          </button>
+          {puzzle.solved_by_me && (
+            <span className="puzzle-solved-mark" title="you've solved this one">
+              <Check className="glyph-icon" />solved
+            </span>
+          )}
+          <a href={href} onClick={play} className="puzzle-play-btn">
+            {puzzle.solved_by_me ? 'replay' : 'play'}
+          </a>
         </div>
       </div>
     </div>

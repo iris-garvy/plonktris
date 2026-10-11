@@ -1,0 +1,11 @@
+.playfield {
+  display: block;
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.playfield.interactive {
+  cursor: crosshair;
+  touch-action: none; /* drags paint instead of scrolling on touch screens */
+}

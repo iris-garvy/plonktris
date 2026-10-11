@@ -1,8 +1,5 @@
 [workspace]
-name = "plonktris"
 members = [
-    "crates/circuit",
-    "crates/wasm",
     "crates/server",
 ]
 resolver = "2"

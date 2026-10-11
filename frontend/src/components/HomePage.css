@@ -111,6 +111,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   padding: 0;
+  text-decoration: none;
 }
 .leader-name:hover { color: var(--lavender); text-decoration: underline; }
 

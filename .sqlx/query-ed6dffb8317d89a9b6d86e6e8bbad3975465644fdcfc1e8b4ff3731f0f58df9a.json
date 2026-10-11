@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO solves (puzzle_id, user_id, solution, first_solve)\n         VALUES ($1, $2, $3, NOT EXISTS (SELECT 1 FROM solves WHERE puzzle_id = $1))\n         ON CONFLICT (puzzle_id, user_id) DO NOTHING\n         RETURNING first_solve",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "first_solve",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ed6dffb8317d89a9b6d86e6e8bbad3975465644fdcfc1e8b4ff3731f0f58df9a"
+}

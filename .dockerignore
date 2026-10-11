@@ -1,7 +1,14 @@
-target
+# Only Cargo.toml/lock, crates/ and .sqlx/ are needed to build the server image.
 .git
-out
+target
+**/target
 frontend
 **/node_modules
-*.log
+shared
+out
+src
+.claude
 .env
+.env.*
+*.log
+*.md

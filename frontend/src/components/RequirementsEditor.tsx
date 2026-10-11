@@ -1,79 +1,91 @@
-import type { Requirements } from '../tetrisLedger';
+import type { Requirements } from '../game/engine';
+import { noFocus } from '../puzzleInfo';
 import './RequirementsEditor.css';
 
 const REQ_FIELDS = [
-  { label: 'TSS',       desc: 'T-Spin Singles',  idx: 0, boolean: false },
-  { label: 'TSD',       desc: 'T-Spin Doubles',  idx: 1, boolean: false },
-  { label: 'TST',       desc: 'T-Spin Triples',  idx: 2, boolean: false },
-  { label: 'Tetris',    desc: 'Tetrises',         idx: 3, boolean: false },
-  { label: 'PC',        desc: 'Perfect Clears',   idx: 4, boolean: false },
-  { label: 'Attack',    desc: 'Lines sent',       idx: 5, boolean: false },
-  { label: 'Combo',     desc: 'Max combo',        idx: 6, boolean: false },
-  { label: 'No Hold',   desc: 'Disallow hold',    idx: 7, boolean: true  },
+  { label: 'TSS',     desc: 't-spin singles',  idx: 0 },
+  { label: 'TSD',     desc: 't-spin doubles',  idx: 1 },
+  { label: 'TST',     desc: 't-spin triples',  idx: 2 },
+  { label: 'TETRIS',  desc: 'tetrises',        idx: 3 },
+  { label: 'PC',      desc: 'perfect clears',  idx: 4 },
+  { label: 'ATTACK',  desc: 'lines sent',      idx: 5 },
+  { label: 'COMBO',   desc: 'max combo',       idx: 6 },
 ];
 
 interface RequirementsEditorProps {
   requirements: Requirements;
   onRequirementsChange: (next: Requirements) => void;
-  locked?: boolean;
+  /** highlight the counted goals (none set yet) */
+  invalid?: boolean;
 }
 
-export default function RequirementsEditor({ requirements, onRequirementsChange, locked = false }: RequirementsEditorProps) {
+export default function RequirementsEditor({ requirements, onRequirementsChange, invalid }: RequirementsEditorProps) {
   function setAt(idx: number, value: number | string) {
-    if (locked) return;
     const next = [...requirements];
-    next[idx] = Math.max(0, Math.min(255, Number(value) || 0));
+    next[idx] = Math.max(0, Math.min(255, Math.floor(Number(value)) || 0));
     onRequirementsChange(next);
   }
 
-  function toggleBool(idx: number) {
-    if (locked) return;
+  function toggleNoHold() {
     const next = [...requirements];
-    next[idx] = next[idx] ? 0 : 1;
+    next[7] = next[7] ? 0 : 1;
     onRequirementsChange(next);
   }
 
   return (
-    <div className="req-editor">
-      <div className="panel-label">CONDITIONS</div>
+    <div className={`req-editor${invalid ? ' invalid' : ''}`}>
       <div className="req-list">
-        {REQ_FIELDS.map(({ label, idx, boolean }) => (
-          <div key={idx} className="req-row">
-            <span className="req-label">{label}</span>
-            {boolean ? (
+        {REQ_FIELDS.map(({ label, desc, idx }) => (
+          <div key={idx} className={`req-row${requirements[idx] > 0 ? ' set' : ''}`}>
+            <span className="req-info">
+              <span className="req-label">{label}</span>
+              <span className="req-desc">{desc}</span>
+            </span>
+            <div className="req-num-wrap">
               <button
-                className={`req-toggle ${requirements[idx] ? 'on' : 'off'}`}
-                onClick={() => toggleBool(idx)}
-                disabled={locked}
-              >
-                {requirements[idx] ? 'YES' : 'NO'}
-              </button>
-            ) : (
-              <div className="req-num-wrap">
-                <button
-                  className="req-step"
-                  onClick={() => setAt(idx, requirements[idx] - 1)}
-                  style={locked ? { visibility: 'hidden' } : undefined}
-                >−</button>
-                <input
-                  type="number"
-                  min={0}
-                  max={255}
-                  value={requirements[idx]}
-                  onChange={e => setAt(idx, e.target.value)}
-                  className="req-num"
-                  readOnly={locked}
-                  tabIndex={locked ? -1 : 0}
-                />
-                <button
-                  className="req-step"
-                  onClick={() => setAt(idx, requirements[idx] + 1)}
-                  style={locked ? { visibility: 'hidden' } : undefined}
-                >+</button>
-              </div>
-            )}
+                type="button"
+                className="req-step"
+                onMouseDown={noFocus}
+                onClick={() => setAt(idx, requirements[idx] - 1)}
+                disabled={requirements[idx] <= 0}
+                aria-label={`fewer ${desc}`}
+              >−</button>
+              <input
+                type="number"
+                min={0}
+                max={255}
+                value={requirements[idx]}
+                onChange={e => setAt(idx, e.target.value)}
+                onFocus={e => e.currentTarget.select()}
+                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                className="req-num"
+                aria-label={desc}
+              />
+              <button
+                type="button"
+                className="req-step"
+                onMouseDown={noFocus}
+                onClick={() => setAt(idx, requirements[idx] + 1)}
+                aria-label={`more ${desc}`}
+              >+</button>
+            </div>
           </div>
         ))}
+        <div className={`req-row${requirements[7] ? ' set' : ''}`}>
+          <span className="req-info">
+            <span className="req-label">NO HOLD</span>
+            <span className="req-desc">hold disabled</span>
+          </span>
+          <button
+            type="button"
+            className={`req-toggle ${requirements[7] ? 'on' : 'off'}`}
+            onMouseDown={noFocus}
+            onClick={toggleNoHold}
+            aria-pressed={!!requirements[7]}
+          >
+            {requirements[7] ? 'ON' : 'OFF'}
+          </button>
+        </div>
       </div>
     </div>
   );

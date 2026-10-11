@@ -1,3 +1,46 @@
+/* ---- settings modal (self-contained: doesn't rely on another component's modal CSS) ---- */
+.modal-overlay.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(24, 17, 23, 0.35);
+}
+
+.settings-panel {
+  width: 400px;
+  max-width: 100%;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  background: var(--bg-base);
+  border: 1px solid var(--pink);
+  box-shadow: 0 8px 28px rgba(24, 17, 23, 0.18);
+  text-align: left;
+}
+
+.settings-done {
+  margin-top: 2px;
+  padding: 8px;
+  background: transparent;
+  border: 1px solid var(--pink);
+  color: var(--pink);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.settings-done:hover { background: rgba(255, 189, 222, 0.15); }
+
+/* ---- editor (also embedded in the profile page) ---- */
 .keys-title {
   font-size: 10px;
   font-weight: 700;
@@ -7,10 +50,102 @@
   padding-bottom: 6px;
 }
 
-.keys-list {
+/* handling */
+.handling-list {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 10px;
+}
+
+.handling-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.handling-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.handling-name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+.handling-hint {
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+
+.handling-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.handling-slider {
+  flex: 1;
+  min-width: 80px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--pink);
+  cursor: pointer;
+  background: transparent;
+}
+
+.handling-num {
+  width: 54px;
+  box-sizing: border-box;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--pink);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 6px;
+  text-align: right;
+  outline: none;
+  transition: border-color 0.15s;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.handling-num::-webkit-inner-spin-button,
+.handling-num::-webkit-outer-spin-button { display: none; }
+.handling-num:focus { border-color: var(--pink); }
+
+.handling-unit {
+  font-size: 9px;
+  color: var(--text-muted);
+  width: 14px;
+}
+
+.handling-instant {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 4px 6px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.handling-instant:hover { color: var(--lavender); border-color: var(--lavender); }
+.handling-instant.on {
+  color: var(--lavender);
+  border-color: var(--lavender);
+  background: rgba(181, 165, 255, 0.15);
+}
+
+/* keybindings */
+.keys-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  gap: 5px 16px;
 }
 
 .keys-row {
@@ -27,7 +162,7 @@
 }
 
 .keys-bind {
-  min-width: 90px;
+  min-width: 78px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   color: var(--pink);
@@ -39,7 +174,6 @@
   cursor: pointer;
   transition: border-color 0.15s;
 }
-
 .keys-bind:hover { border-color: var(--pink); }
 
 .key-icon {
@@ -49,6 +183,7 @@
   stroke-width: 2.5;
 }
 .key-mod { margin-right: 4px; }
+.key-unbound { color: var(--text-muted); font-weight: 400; }
 
 .keys-bind.listening {
   border-color: var(--lavender);
@@ -60,31 +195,31 @@
   50% { opacity: 0.5; }
 }
 
+.keys-help {
+  font-size: 9px;
+  color: var(--lavender);
+  letter-spacing: 0.03em;
+}
+
 .keys-unit {
   font-size: 8px;
   color: var(--text-muted);
 }
 
-.handling-input {
-  width: 90px;
-  box-sizing: border-box;
-  background: var(--bg-raised);
+.keys-reset {
+  align-self: flex-start;
+  background: transparent;
   border: 1px solid var(--border);
-  color: var(--pink);
+  color: var(--text-muted);
   font-family: inherit;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  padding: 5px 8px;
-  text-align: center;
-  outline: none;
-  transition: border-color 0.15s;
-  -moz-appearance: textfield;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
 }
+.keys-reset:hover { color: var(--text-dim); border-color: var(--text-dim); }
 
-.handling-input::-webkit-inner-spin-button,
-.handling-input::-webkit-outer-spin-button {
-  display: none;
-}
-
-.handling-input:focus { border-color: var(--pink); }
+/* keeps the DAS slider the same width as the ones with an "instant" button */
+.handling-instant.placeholder { visibility: hidden; pointer-events: none; }

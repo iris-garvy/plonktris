@@ -1,19 +1,27 @@
-import { useState, type SubmitEvent } from 'react';
+import { useEffect, useState, type SubmitEvent } from 'react';
 import { LogIn, UserPlus } from 'lucide-react';
-import { api, setToken, type User } from '../api';
+import { api, errorMessage, setSession, type User } from '../api';
 import './AuthModal.css';
 
 interface AuthModalProps {
   onAuthed: (user: User) => void;
   onClose: () => void;
+  /** why we're asking, e.g. "log in to save this solve" */
+  reason?: string | null;
 }
 
-export default function AuthModal({ onAuthed, onClose }: AuthModalProps) {
+export default function AuthModal({ onAuthed, onClose, reason }: AuthModalProps) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   async function submit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -37,27 +45,28 @@ export default function AuthModal({ onAuthed, onClose }: AuthModalProps) {
     try {
       const fn = mode === 'login' ? api.login : api.register;
       const { token, user } = await fn(username, password);
-      setToken(token);
+      setSession(token, user);
       onAuthed(user);
-      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
+      setError(errorMessage(err));
       setBusy(false);
     }
   }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-panel auth-panel" onClick={e => e.stopPropagation()}>
+      <div className="modal-panel auth-panel" role="dialog" aria-modal="true" aria-label={mode === 'login' ? 'log in' : 'register'} onClick={e => e.stopPropagation()}>
+        {reason && <div className="auth-reason">{reason}</div>}
         <div className="auth-tabs">
           <button
+            type="button"
             className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
             onClick={() => { setMode('login'); setError(null); }}
           >
             LOG IN
           </button>
           <button
+            type="button"
             className={`auth-tab ${mode === 'register' ? 'active' : ''}`}
             onClick={() => { setMode('register'); setError(null); }}
           >

@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
-import { api, type Puzzle, type UserProfile } from '../api';
+import { api, ApiError, errorMessage, type Puzzle, type UserProfile } from '../api';
 import PuzzleCard from './PuzzleCard';
-import KeybindingsEditor from './KeybindingsEditor';
-import { type Bindings, type Handling } from '../keybindings';
+import { GearIcon } from './icons';
+import './BrowsePage.css';
 import './ProfilePage.css';
 
 interface ProfilePageProps {
@@ -11,12 +10,8 @@ interface ProfilePageProps {
   onPlay: (puzzle: Puzzle) => void;
   onCreator: (username: string) => void;
   isOwner: boolean;
-  secureProving: boolean;
-  onSecureProvingChange: (v: boolean) => void;
-  bindings: Bindings;
-  onBindingsChange: (next: Bindings) => void;
-  handling: Handling;
-  onHandlingChange: (next: Handling) => void;
+  onOpenSettings: () => void;
+  onCreate: () => void;
 }
 
 function formatJoined(iso: string): string {
@@ -25,37 +20,36 @@ function formatJoined(iso: string): string {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export default function ProfilePage({
-  username, onPlay, onCreator, isOwner, secureProving, onSecureProvingChange,
-  bindings, onBindingsChange, handling, onHandlingChange,
-}: ProfilePageProps) {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export default function ProfilePage({ username, onPlay, onCreator, isOwner, onOpenSettings, onCreate }: ProfilePageProps) {
+  // keyed by the username it belongs to, so switching profiles never flashes the old one
+  const [loaded, setLoaded] = useState<{ for: string; profile: UserProfile } | null>(null);
+  const [error, setError] = useState<{ for: string; message: string } | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
+    api.getUserProfile(username)
+      .then(p => { if (!cancelled) setLoaded({ for: username, profile: p }); })
+      .catch(err => {
+        if (cancelled) return;
+        const message = err instanceof ApiError && err.status === 404
+          ? `there's no player called “${username}”`
+          : errorMessage(err);
+        setError({ for: username, message });
+      });
+    return () => { cancelled = true; };
+  }, [username, attempt]);
 
-    function load(initial: boolean) {
-      if (initial) { setProfile(null); setError(null); }
-      api.getUserProfile(username)
-        .then(p => {
-          if (cancelled) return;
-          setProfile(p);
-          // while submissions are still proving, refresh so they resolve live
-          if (p.pending.some(j => j.status !== 'failed')) {
-            timer = setTimeout(() => load(false), 3000);
-          }
-        })
-        .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : String(err)); });
-    }
-
-    load(true);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [username]);
-
-  if (error) {
-    return <div className="browse-status"><div className="browse-error">{error}</div></div>;
+  const profile = loaded?.for === username ? loaded.profile : null;
+  if (profile == null && error?.for === username) {
+    return (
+      <div className="browse-status">
+        <div className="browse-error">{error.message}</div>
+        <button className="browse-retry" onClick={() => { setError(null); setAttempt(a => a + 1); }}>
+          try again
+        </button>
+      </div>
+    );
   }
   if (profile == null) {
     return <div className="browse-status">loading profile…</div>;
@@ -71,30 +65,13 @@ export default function ProfilePage({
         </div>
       </div>
 
-      {profile.pending.length > 0 && (
-        <section className="profile-section">
-          <div className="profile-section-label">SUBMISSIONS</div>
-          <div className="pending-list">
-            {profile.pending.map(job => (
-              <div key={job.id} className={`pending-row ${job.status}`}>
-                <span className="pending-name">{job.name}</span>
-                {job.status === 'failed' ? (
-                  <span className="pending-status failed" title={job.failed_reason ?? ''}>
-                    <X className="glyph-icon glyph-lead" />failed{job.failed_reason ? `: ${job.failed_reason}` : ''}
-                  </span>
-                ) : (
-                  <span className="pending-status">submitted — verifying…</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       <section className="profile-section">
         <div className="profile-section-label">CREATED</div>
         {profile.created.length === 0 ? (
-          <div className="profile-empty">no puzzles published yet</div>
+          <div className="profile-empty">
+            no puzzles published yet
+            {isOwner && <> — <button className="creator-link" onClick={onCreate}>make one</button></>}
+          </div>
         ) : (
           <div className="browse-grid compact">
             {profile.created.map(p => (
@@ -120,27 +97,11 @@ export default function ProfilePage({
       {isOwner && (
         <section className="profile-section">
           <div className="profile-section-label">SETTINGS</div>
-          <label className="profile-setting">
-            <input
-              type="checkbox"
-              checked={secureProving}
-              onChange={e => onSecureProvingChange(e.target.checked)}
-            />
-            <span className="profile-setting-text">
-              <span className="profile-setting-name">secure proving</span>
-              <span className="profile-setting-desc">
-                adds a secure option for proof submission that generates entirely within browser. WARNING: this is much slower.
-              </span>
-            </span>
-          </label>
-
-          <div className="profile-keys">
-            <KeybindingsEditor
-              bindings={bindings}
-              onChange={onBindingsChange}
-              handling={handling}
-              onHandlingChange={onHandlingChange}
-            />
+          <div className="profile-settings-link">
+            <span>controls and handling (DAS, ARR, soft drop) are saved in this browser.</span>
+            <button className="profile-settings-btn" onClick={onOpenSettings}>
+              <GearIcon className="btn-icon" />open settings
+            </button>
           </div>
         </section>
       )}

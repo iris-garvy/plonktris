@@ -7,7 +7,7 @@
 .req-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .req-row {
@@ -18,13 +18,21 @@
   padding: 4px 6px;
   border: 1px solid var(--border);
   background: var(--bg-raised);
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.15s;
 }
-.req-row:hover { border-color: #444; }
+.req-row:hover { border-color: var(--lavender-soft); }
+.req-row.set { border-color: color-mix(in srgb, var(--pink) 55%, var(--border)); background: var(--bg-panel); }
+.req-editor.invalid .req-row:not(:last-child) { border-color: color-mix(in srgb, #d6336c 45%, var(--border)); }
 
-.req-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.req-info { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .req-label { font-size: 10px; font-weight: 700; color: var(--text); letter-spacing: 0.04em; }
-.req-desc  { font-size: 8px; color: var(--text-muted); }
+.req-desc  {
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .req-num-wrap { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 
@@ -34,8 +42,8 @@
   color: var(--text-muted);
   font-family: inherit;
   font-size: 12px;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -43,19 +51,22 @@
   line-height: 1;
   transition: color 0.1s, border-color 0.1s;
 }
-.req-step:hover { color: var(--pink); border-color: var(--pink); }
+.req-step:hover:not(:disabled) { color: var(--pink); border-color: var(--pink); }
+.req-step:disabled { opacity: 0.35; cursor: default; }
 
 .req-num {
-  width: 30px;
+  width: 32px;
   background: var(--bg-base);
   border: 1px solid var(--border);
   color: var(--text);
   font-family: inherit;
   font-size: 11px;
+  font-weight: 700;
   text-align: center;
   padding: 1px 0;
-  height: 18px;
+  height: 20px;
   -moz-appearance: textfield;
+  appearance: textfield;
   transition: border-color 0.1s;
 }
 .req-num:focus { outline: none; border-color: var(--pink); }
@@ -64,11 +75,12 @@
 
 .req-toggle {
   font-family: inherit;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
   border: 1px solid var(--border);
-  padding: 2px 6px;
+  width: 76px;
+  height: 20px;
   cursor: pointer;
   flex-shrink: 0;
   transition: all 0.15s;
@@ -76,8 +88,4 @@
   color: var(--text-muted);
 }
 .req-toggle:hover { border-color: var(--pink); color: var(--pink); }
-.req-toggle.on    { border-color: var(--pink); color: var(--pink); background: rgba(255,189,222,0.08); }
-
-/* locked (solve mode): same appearance, no interaction */
-.req-toggle:disabled { pointer-events: none; opacity: 1; }
-.req-num[readonly]   { pointer-events: none; }
+.req-toggle.on    { border-color: var(--pink); color: var(--pink); background: rgba(255, 189, 222, 0.12); }
