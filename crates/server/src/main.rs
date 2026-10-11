@@ -5,45 +5,18 @@ use std::collections::HashMap;
 use std::time::{Instant, Duration};
 use std::net::SocketAddr;
 use sqlx::PgPool;
-use tokio::sync::Notify;
-use circuit::MonoCircuit;
-use circuit::reclib;
 use tower_http::cors::{CorsLayer, AllowOrigin, Any};
 use argon2::{password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},Argon2};
 use axum::http::{HeaderMap, HeaderValue, header::AUTHORIZATION};
 use axum::{async_trait, extract::FromRequestParts, http::request::Parts};
 
-
-/// Max puzzle length the server will prove itself. Bound by VM memory (~10 at
-/// 4GB). Longer puzzles are routed to in-browser proving. Bump with the VM RAM.
-// Puzzles up to this length use the fast monolithic prover; longer ones use the
-// recursive (chunked) prover. Kept low (8) so the *browser* never runs a monolithic
-// proof big enough to be memory-flaky in wasm — 9+ get the bounded-memory path.
-// Must match MONOLITHIC_MAX_PIECES in the frontend worker.
-const MONOLITHIC_MAX_PIECES: usize = 8;
-// Pieces per recursive step proof. Padded length is a multiple of this. 4 benchmarked
-// faster than 8 for ~11 pieces (less padding) and uses less per-step memory — which
-// matters for the browser path, where the chunk size is gated by wasm memory.
-const RECURSIVE_CHUNK: usize = 4;
-// Aggregator padding for chunk=4 (uniform across recursive lengths; see discover_pads).
-// Fixed so the server and browser build *identical* aggregators (cross-verification).
-const RECURSIVE_AGG_PAD: usize = 1 << 13;
-
-type RecursiveCircuits = (reclib::StepCircuit, reclib::AggCircuit);
-type RecursiveCache = Mutex<HashMap<usize, Arc<RecursiveCircuits>>>;
-// lazily-built monolithic circuits, keyed by num_pieces. Prover and verifier come
-// from the SAME built circuit (no on-disk verifier_data), so they can never drift.
-type MonolithicCache = Mutex<HashMap<usize, Arc<MonoCircuit>>>;
+mod engine;
+mod validate;
 
 struct AppState {
     db: PgPool,
-    new_job: Notify,
     // per-IP registration timestamps, for throttling account creation
     reg_attempts: Mutex<HashMap<String, Vec<Instant>>>,
-    // lazily-built recursive circuits, keyed by padded length
-    recursive: RecursiveCache,
-    // lazily-built monolithic circuits, keyed by num_pieces
-    monolithic: MonolithicCache,
 }
 
 #[tokio::main]
@@ -51,47 +24,25 @@ async fn main() {
 
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://localhost/plonktris".to_string());
-    // Fly drops idle/old TCP connections; bare PgPool::connect would then hand out a dead
-    // one and a request fails with "got 0 bytes at EOF". Ping before handing out (skip dead
-    // conns), keep one warm, and recycle connections well before Fly's cutoff.
+    // Hosts and managed Postgres (Fly, Neon, ...) drop idle/old TCP connections; a bare
+    // PgPool::connect would then hand out a dead one and a request fails with "got 0 bytes at
+    // EOF". Ping before handing out (skip dead conns) and recycle connections well before any
+    // cutoff. Small and min 0: free-tier Postgres caps connections, and holding none while idle
+    // lets a scale-to-zero database actually suspend. TLS (rustls) is negotiated from the URL,
+    // e.g. `?sslmode=require` for Neon.
     let db = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(10)
-        .min_connections(1)
+        .max_connections(5)
+        .min_connections(0)
         .acquire_timeout(Duration::from_secs(10))
-        .idle_timeout(Duration::from_secs(300))
+        .idle_timeout(Duration::from_secs(120))
         .max_lifetime(Duration::from_secs(1800))
         .test_before_acquire(true)
         .connect(&database_url)
         .await.unwrap();
 
-    // Reclaim jobs orphaned by a previous crash/restart: a job marked 'proving'
-    // when the process died is never re-selected (the worker only picks 'pending'),
-    // so it would hang forever. On a fresh start nothing is actually proving.
-    // NOTE: assumes a single worker process — see fly.toml (run one machine).
-    let reclaimed = sqlx::query!("UPDATE jobs SET status = 'pending' WHERE status = 'proving'")
-        .execute(&db).await
-        .map(|r| r.rows_affected())
-        .unwrap_or(0);
-    if reclaimed > 0 { println!("reclaimed {reclaimed} orphaned proving job(s)"); }
-
     println!("ready!");
 
-    let state = Arc::new(AppState { db: db, new_job: Notify::new(), reg_attempts: Mutex::new(HashMap::new()), recursive: Mutex::new(HashMap::new()), monolithic: Mutex::new(HashMap::new()) });
-    let worker_state = state.clone();
-
-    tokio::spawn(async move {
-        loop { 
-            match process_next_job(&worker_state).await {
-                Ok(true) => {}
-                Ok(false) => {worker_state.new_job.notified().await;}
-                Err(e) => {
-                    eprintln!("worker error: {e}");
-                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                }
-            }
-
-        }
-    });
+    let state = Arc::new(AppState { db, reg_attempts: Mutex::new(HashMap::new()) });
 
     let cors = CorsLayer::new()
         .allow_methods(Any)
@@ -108,15 +59,13 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(|| async { "plonktris online" }))
-        .route("/request", post(request_proof))
-        .route("/submit", post(submit_proof_json))
-        .route("/jobs/:id", get(get_job_status))
         .route("/auth/register", post(register_account))
         .route("/auth/login", post(login_account))
         .route("/auth/logout", post(logout_account))
         .route("/auth/me", get(me))
-        .route("/puzzles", get(list_puzzles))
+        .route("/puzzles", get(list_puzzles).post(publish_puzzle))
         .route("/puzzles/:id", get(get_puzzle))
+        .route("/puzzles/:id/solve", post(solve_puzzle))
         .route("/puzzles/:id/attempt", post(record_attempt))
         .route("/stats", get(get_stats))
         .route("/leaderboard", get(get_leaderboard))
@@ -124,467 +73,187 @@ async fn main() {
         .layer(cors)
         .with_state(state);
 
-    let bind_addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
+    let bind_addr = bind_addr(std::env::var("BIND_ADDR").ok(), std::env::var("PORT").ok());
     let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
     println!("listening on {bind_addr}");
     axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await.unwrap();
 }
 
+// BIND_ADDR wins (local dev / explicit config); else PORT, which most hosts set (listen on all
+// interfaces); else localhost:3000.
+fn bind_addr(bind_addr: Option<String>, port: Option<String>) -> String {
+    let set = |v: Option<String>| v.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    match (set(bind_addr), set(port)) {
+        (Some(addr), _) => addr,
+        (None, Some(port)) => format!("0.0.0.0:{port}"),
+        (None, None) => "127.0.0.1:3000".to_string(),
+    }
+}
+
+fn db_err(e: sqlx::Error) -> (StatusCode, String) {
+    (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}"))
+}
+
+// replay a solution against a puzzle (API formats); Err is the client-facing 400
+fn check_solution(board: &[u8], queue: &[u8], requirements: &[u8], solution: &[u8]) -> Result<(), (StatusCode, String)> {
+    let result = engine::replay_api(board, queue, requirements, solution);
+    match result.error {
+        None => Ok(()),
+        Some(e) => Err((StatusCode::BAD_REQUEST, format!("solution doesn't solve this puzzle: {}", e.message()))),
+    }
+}
+
 #[derive(Deserialize)]
-struct SubmitProofRequest {
-    actions: Vec<u8>,
+struct PublishRequest {
+    name: Option<String>,
     board: Vec<u8>,
     queue: Vec<u8>,
     requirements: Vec<u8>,
-    name: Option<String>,             // publish mode
-    puzzle_id: Option<uuid::Uuid>,    // solve mode
+    solution: Vec<u8>,
 }
 
-async fn request_proof(
+#[derive(Serialize)]
+struct PublishResponse {
+    id: String,
+}
+
+// Publish: the creator's own solve is replayed to prove the puzzle is solvable, then stored.
+async fn publish_puzzle(
     State(state): State<Arc<AppState>>,
     auth: Option<AuthUser>,
-    Json(body): Json<SubmitProofRequest>
-) -> Result<Json<SubmitVerificationResponse>, (StatusCode, String)> {
-    let num_pieces = body.queue.len();
-    let mut req_counter = 0;
-    if num_pieces < 1 || num_pieces > 21 {
-        return Err((StatusCode::BAD_REQUEST, "num_pieces must be between 1 and 21".into()));
-    }
-    // num_pieces > MONOLITHIC_MAX_PIECES is allowed now — the worker routes long
-    // puzzles to the recursive (memory-bounded) prover. The 1..=21 bound above still caps it.
-    for req in 0..7 {
-        req_counter += body.requirements[req];
-    }
-    if req_counter == 0 {
-        return Err((StatusCode::BAD_REQUEST, "must have requirements".into()));
-    }
+    Json(body): Json<PublishRequest>,
+) -> Result<Json<PublishResponse>, (StatusCode, String)> {
+    let user = auth.ok_or((StatusCode::UNAUTHORIZED, "log in to publish a puzzle".to_string()))?;
 
-    let user_id = auth.map(|a| a.id);
+    validate::validate_puzzle(&body.board, &body.queue, &body.requirements)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let name = validate::clean_name(body.name.as_deref())
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    validate::validate_solution(&body.solution)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    check_solution(&body.board, &body.queue, &body.requirements, &body.solution)?;
 
-    let name = if let Some(target) = body.puzzle_id {
-        let p = sqlx::query!(
-            "SELECT board, queue, requirements FROM puzzles WHERE id = $1",
-            target
-        )
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?
-        .ok_or((StatusCode::NOT_FOUND, "puzzle not found".to_string()))?;
-
-        if p.board != body.board || p.queue != body.queue || p.requirements != body.requirements {
-            return Err((StatusCode::BAD_REQUEST, "inputs don't match the puzzle".into()));
-        }
-        // anonymous solves aren't recorded, so don't burn the prover on them
-        if user_id.is_none() {
-            return Err((StatusCode::UNAUTHORIZED, "log in to record a solve".into()));
-        }
-        None
-    } else {
-        if user_id.is_none() {
-            return Err((StatusCode::UNAUTHORIZED, "log in to publish a puzzle".into()));
-        }
-
-        //puzzle name moderation
-        let n = body.name.unwrap_or_default().trim().to_string();
-        let n = if n.is_empty() { "untitled".to_string() } else { n };
-        if n.len() > 64 {
-            return Err((StatusCode::BAD_REQUEST, "name must be at most 64 characters".into()));
-        }
-        if rustrict::CensorStr::is_inappropriate(n.as_str()) {
-            return Err((StatusCode::BAD_REQUEST, "pick a different puzzle name".into()));
-        }
-
-        // reject exact duplicates
-        let dup = sqlx::query_scalar!(
-            r#"SELECT EXISTS(
-                SELECT 1 FROM puzzles
-                WHERE board = $1 AND queue = $2 AND requirements = $3
-            ) AS "exists!""#,
-            body.board,
-            body.queue,
-            body.requirements,
-        )
-        .fetch_one(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
-
-        if dup {
-            return Err((StatusCode::CONFLICT, "an identical puzzle already exists".into()));
-        }
-        Some(n)
-    };
-
-    // over any limit, a 429 tells the client to fall back to in-browser proving
-    const MAX_QUEUE_GLOBAL: i64 = 32;  // total jobs queued/proving across all users
-    const MAX_INFLIGHT: i64 = 2;       // per-user jobs pending/proving at once
-    const MAX_PER_HOUR: i64 = 10;      // per-user server proofs per rolling hour
-
-    // global cap bounds total load regardless of how many accounts an attacker makes
-    let queue_depth = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) AS "n!" FROM jobs WHERE status IN ('pending','proving')"#
-    ).fetch_one(&state.db).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
-    if queue_depth >= MAX_QUEUE_GLOBAL {
-        return Err((StatusCode::TOO_MANY_REQUESTS,
-            "the prover is busy — prove securely in your browser".into()));
-    }
-
-    if let Some(uid) = user_id {
-        let inflight = sqlx::query_scalar!(
-            r#"SELECT COUNT(*) AS "n!" FROM jobs WHERE user_id = $1 AND status IN ('pending','proving')"#,
-            uid
-        ).fetch_one(&state.db).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
-        let recent = sqlx::query_scalar!(
-            r#"SELECT COUNT(*) AS "n!" FROM jobs WHERE user_id = $1 AND submitted > now() - interval '1 hour'"#,
-            uid
-        ).fetch_one(&state.db).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
-        if inflight >= MAX_INFLIGHT || recent >= MAX_PER_HOUR {
-            return Err((StatusCode::TOO_MANY_REQUESTS,
-                "fast proving limit reached — prove securely in your browser".into()));
-        }
-    }
-
-    let id = sqlx::query_scalar!(
-        "INSERT INTO jobs (board, queue, requirements, actions, user_id, name, target_puzzle_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id",
+    // reject exact duplicates
+    let dup = sqlx::query_scalar!(
+        r#"SELECT EXISTS(
+            SELECT 1 FROM puzzles
+            WHERE board = $1 AND queue = $2 AND requirements = $3
+        ) AS "exists!""#,
         body.board,
         body.queue,
         body.requirements,
-        body.actions,
-        user_id,
-        name,
-        body.puzzle_id,
     )
     .fetch_one(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+    .map_err(db_err)?;
 
-    state.new_job.notify_one();
-
-    Ok(Json(SubmitVerificationResponse {
-        success: true,
-        proof_id: id.to_string(),
-    }))
-}
-
-async fn process_next_job(worker_state: &Arc<AppState>) -> Result<bool, String> {
-    let job = sqlx::query!(
-        "SELECT id, board, queue, requirements, actions, user_id, name, target_puzzle_id
-        FROM jobs
-        WHERE status = 'pending'
-        ORDER BY submitted ASC
-        LIMIT 1
-        FOR UPDATE SKIP LOCKED",
-    )
-    .fetch_optional(&worker_state.db).await.map_err(|e| format!("db error: {e}"))?;
-
-    if let Some(job) = job {
-        sqlx::query!("UPDATE jobs SET status = 'proving' WHERE id = $1", job.id)
-        .execute(&worker_state.db).await.map_err(|e| format!("db error: {e}"))?;
-        let board = job.board.clone();
-        let queue = job.queue.clone();
-        let requirements = job.requirements.clone();
-        let secret_moves = job.actions.unwrap().clone();
-        let num_pieces = queue.len();
-        let thread_state = worker_state.clone();
-
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        std::thread::spawn(move || {
-            // long puzzles use the recursive (memory-bounded) prover
-            let result = if num_pieces > MONOLITHIC_MAX_PIECES {
-                prove_recursive(&thread_state.recursive, &board, &queue, &secret_moves)
-            } else {
-                let circuit = get_or_build_monolithic(&thread_state.monolithic, num_pieces);
-                circuit.prove(&board, &queue, &requirements, &secret_moves).map(|p| p.to_bytes())
-            };
-            let _ = tx.send(result);
-        });
-
-        match rx.await {
-            Ok(Ok(proof_bytes)) => {
-                let outcome = if let Some(target) = job.target_puzzle_id {
-                    record_solve(worker_state, proof_bytes, &job.board, &job.queue,
-                        &job.requirements, target, job.user_id).await
-                } else {
-                    let body = SubmitVerificationRequest {
-                        proof: proof_bytes,
-                        board: job.board,
-                        queue: job.queue,
-                        requirements: job.requirements,
-                        name: None,
-                        puzzle_id: None,
-                    };
-                    submit_proof(worker_state.clone(), body, job.user_id,
-                        job.name.unwrap_or_else(|| "untitled".to_string())).await
-                };
-                match outcome {
-                    Ok(puzzle_id) => {
-                        sqlx::query!("UPDATE jobs SET status = 'done', actions = NULL, puzzle_id = $2
-                        WHERE id = $1", job.id, puzzle_id)
-                        .execute(&worker_state.db).await.map_err(|e| format!("db error: {e}"))?;
-                    }
-                    Err(e) => {
-                        sqlx::query!("UPDATE jobs SET status = 'failed', failed_reason = $2, actions = NULL
-                        WHERE id = $1", job.id, e)
-                        .execute(&worker_state.db).await.map_err(|e| format!("db error: {e}"))?;
-                    }
-                }
-            }
-            Ok(Err(e)) => {
-                sqlx::query!("UPDATE jobs SET status = 'failed', failed_reason = $2, actions = NULL 
-                WHERE id = $1", job.id, e)
-                .execute(&worker_state.db).await.map_err(|e| format!("db error: {e}"))?;    
-            }
-            Err(e) => {
-                sqlx::query!("UPDATE jobs SET status = 'failed', failed_reason = $2, actions = NULL 
-                WHERE id = $1", job.id, format!("thread error: {}", e))
-                .execute(&worker_state.db).await.map_err(|e| format!("db error: {e}"))?;
-            }
-        }
-    } else {
-        return Ok(false);
-    }
-Ok(true)
-}
-
-#[derive(Serialize)]
-struct JobStatusResponse {
-    status: String,
-    puzzle_id: Option<String>,
-    failed_reason: Option<String>,
-}
-
-async fn get_job_status(
-    State(state): State<Arc<AppState>>,
-    Path(job_id): Path<uuid::Uuid>,
-) -> Result<Json<JobStatusResponse>, (StatusCode, String)> {
-    let job = sqlx::query!(
-        "SELECT status, puzzle_id, failed_reason FROM jobs WHERE id = $1",
-        job_id
-    )
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?
-    .ok_or((StatusCode::NOT_FOUND, "job not found".to_string()))?;
-
-    Ok(Json(JobStatusResponse {
-        status: job.status,
-        puzzle_id: job.puzzle_id.map(|id| id.to_string()),
-        failed_reason: job.failed_reason,
-    }))
-}
-
-
-#[derive(Deserialize)]
-struct SubmitVerificationRequest {
-    proof: Vec<u8>,
-    board: Vec<u8>,
-    queue: Vec<u8>,
-    requirements: Vec<u8>,
-    name: Option<String>,             // publish mode (client-side proving)
-    puzzle_id: Option<uuid::Uuid>,    // solve mode (client-side proving)
-}
-
-#[derive(Serialize)]
-struct SubmitVerificationResponse {
-    success: bool,
-    proof_id: String,
-}
-
-// verify proof bytes against the verifier for this queue length
-fn verify_proof(state: &AppState, proof: &[u8], board: &[u8], queue: &[u8], requirements: &[u8]) -> Result<(), String> {
-    let num_pieces = queue.len();
-    if num_pieces < 1 || num_pieces > 21 {
-        return Err(format!("num_pieces must be between 1 and 21"));
-    }
-    // long puzzles use the recursive prover/verifier
-    if num_pieces > MONOLITHIC_MAX_PIECES {
-        return verify_recursive(&state.recursive, proof, board, queue, requirements);
+    if dup {
+        return Err((StatusCode::CONFLICT, "an identical puzzle already exists".into()));
     }
 
-    // Build (or reuse) the monolithic circuit for this length and verify against it.
-    // verify_bytes deserializes against the freshly-built common data and binds the
-    // proof's public inputs to the submitted board/queue/requirements.
-    let circuit = get_or_build_monolithic(&state.monolithic, num_pieces);
-    circuit.verify_bytes(proof, board, queue, requirements)
-}
-
-// Lazily build (and cache) the monolithic circuit for a given piece count. Mirrors
-// get_or_build_recursive: prover and verifier both come from this single built circuit.
-fn get_or_build_monolithic(cache: &MonolithicCache, num_pieces: usize) -> Arc<MonoCircuit> {
-    let mut map = cache.lock().unwrap();
-    map.entry(num_pieces)
-        .or_insert_with(|| Arc::new(MonoCircuit::build(num_pieces)))
-        .clone()
-}
-
-// Lazily build (and cache) the recursive circuits for a given padded length.
-fn get_or_build_recursive(cache: &RecursiveCache, padded_len: usize) -> Arc<RecursiveCircuits> {
-    let mut map = cache.lock().unwrap();
-    map.entry(padded_len).or_insert_with(|| {
-        let step = reclib::StepCircuit::build(RECURSIVE_CHUNK, padded_len);
-        let agg = reclib::build_aggregator_padded(&step, padded_len, RECURSIVE_AGG_PAD);
-        Arc::new((step, agg))
-    }).clone()
-}
-
-// Prove a long puzzle recursively. `actions` is the flat secret_moves (num_pieces*32).
-fn prove_recursive(cache: &RecursiveCache, board: &[u8], queue: &[u8], actions: &[u8]) -> Result<Vec<u8>, String> {
-    let num_pieces = queue.len();
-    let all_actions: Vec<Vec<u8>> = (0..num_pieces)
-        .map(|p| actions[p * 32..(p + 1) * 32].to_vec())
-        .collect();
-    let (pq, pa) = reclib::pad_puzzle(queue, &all_actions, RECURSIVE_CHUNK);
-    let circuits = get_or_build_recursive(cache, pq.len());
-    let proof = reclib::prove_solution(&circuits.0, &circuits.1, RECURSIVE_CHUNK, board, &pq, &pa)?;
-    Ok(proof.to_bytes())
-}
-
-// Verify a recursive aggregate proof, bound to the (padded) puzzle + requirements.
-fn verify_recursive(cache: &RecursiveCache, proof: &[u8], board: &[u8], queue: &[u8], requirements: &[u8]) -> Result<(), String> {
-    let (pq, _) = reclib::pad_puzzle(queue, &[], RECURSIVE_CHUNK);
-    let circuits = get_or_build_recursive(cache, pq.len());
-    reclib::verify_solution_bytes(&circuits.1, proof, board, &pq, requirements, pq.len())
-}
-
-async fn submit_proof(
-    state: Arc<AppState>,
-    body: SubmitVerificationRequest,
-    creator_id: Option<uuid::Uuid>,
-    name: String,
-) -> Result<uuid::Uuid, String>  {
-    let num_pieces = body.queue.len();
-    let tss = body.requirements[0] as i32;
-    let tsd = body.requirements[1] as i32;
-    let tst = body.requirements[2] as i32;
-    let tetris = body.requirements[3] as i32;
-    let pc = body.requirements[4] as i32;
-    let attack = body.requirements[5] as i32;
-    let max_combo = body.requirements[6] as i32;
-    let no_hold = body.requirements[7] == 1;
-
-    let mut req_counter = 0;
-    for req in 0..7 {
-        req_counter += body.requirements[req];
-    }
-    if req_counter == 0 {
-        return Err(format!("must have requirements"))
-    }
-
-    verify_proof(&state, &body.proof, &body.board, &body.queue, &body.requirements)?;
-
+    let r = &body.requirements;
     let id = sqlx::query_scalar!(
-        "INSERT INTO puzzles (proof, board, queue, requirements, num_pieces, tss, tsd, tst, attack, pc, tetris, max_combo, no_hold, name, creator_id)
+        "INSERT INTO puzzles (board, queue, requirements, solution, num_pieces, tss, tsd, tst, tetris, pc, attack, max_combo, no_hold, name, creator_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          RETURNING id",
-        body.proof,
         body.board,
         body.queue,
         body.requirements,
-        num_pieces as i32,
-        tss,
-        tsd,
-        tst,
-        attack,
-        pc,
-        tetris,
-        max_combo,
-        no_hold,
+        body.solution,
+        body.queue.len() as i32,
+        r[0] as i32,
+        r[1] as i32,
+        r[2] as i32,
+        r[3] as i32,
+        r[4] as i32,
+        r[5] as i32,
+        r[6] as i32,
+        r[7] == 1,
         name,
-        creator_id,
+        user.id,
     )
-    .fetch_one(&state.db).await.map_err(|e| match &e {
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| match &e {
+        // lost a race with an identical publish (puzzles_identity_idx)
         sqlx::Error::Database(db) if db.is_unique_violation() =>
-            "an identical puzzle already exists".to_string(),
-        _ => format!("db error: {e}"),
+            (StatusCode::CONFLICT, "an identical puzzle already exists".to_string()),
+        _ => db_err(e),
     })?;
 
-    Ok(id)
+    Ok(Json(PublishResponse { id: id.to_string() }))
 }
 
-async fn record_solve(
-    state: &Arc<AppState>,
-    proof: Vec<u8>,
-    board: &[u8],
-    queue: &[u8],
-    requirements: &[u8],
-    target: uuid::Uuid,
-    user_id: Option<uuid::Uuid>,
-) -> Result<uuid::Uuid, String> {
-    verify_proof(state, &proof, board, queue, requirements)?;
+#[derive(Deserialize)]
+struct SolveRequest {
+    solution: Vec<u8>,
+}
+
+#[derive(Serialize)]
+struct SolveResponse {
+    new_solve: bool,    // recorded now: first time this user solved it, and they're not the creator
+    first_solve: bool,  // ...and it's the puzzle's first-ever solve
+    solve_count: i64,
+}
+
+// Solve: replay against the stored puzzle; record it unless it's the creator or a repeat.
+async fn solve_puzzle(
+    State(state): State<Arc<AppState>>,
+    Path(puzzle_id): Path<uuid::Uuid>,
+    auth: Option<AuthUser>,
+    Json(body): Json<SolveRequest>,
+) -> Result<Json<SolveResponse>, (StatusCode, String)> {
+    let user = auth.ok_or((StatusCode::UNAUTHORIZED, "log in to record a solve".to_string()))?;
+    validate::validate_solution(&body.solution)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
 
     let p = sqlx::query!(
         "SELECT board, queue, requirements, creator_id FROM puzzles WHERE id = $1",
-        target
+        puzzle_id
     )
-    .fetch_optional(&state.db).await.map_err(|e| format!("db error: {e}"))?
-    .ok_or("puzzle not found".to_string())?;
+    .fetch_optional(&state.db)
+    .await
+    .map_err(db_err)?
+    .ok_or((StatusCode::NOT_FOUND, "puzzle not found".to_string()))?;
 
-    if p.board != board || p.queue != queue || p.requirements != requirements {
-        return Err("inputs don't match the puzzle".to_string());
+    if !validate::replayable(&p.board, &p.queue, &p.requirements) {
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, "this puzzle's stored data is malformed".into()));
+    }
+    check_solution(&p.board, &p.queue, &p.requirements, &body.solution)?;
+
+    // the creator's solves verify but aren't recorded
+    if user.id == p.creator_id {
+        let solve_count = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) AS "n!" FROM solves WHERE puzzle_id = $1"#, puzzle_id
+        ).fetch_one(&state.db).await.map_err(db_err)?;
+        return Ok(Json(SolveResponse { new_solve: false, first_solve: false, solve_count }));
     }
 
-    // anonymous solves verify but aren't recorded
-    if let Some(user_id) = user_id {
-        if user_id != p.creator_id {
-            sqlx::query!("INSERT INTO solves (puzzle_id, user_id) VALUES ($1, $2) 
-            ON CONFLICT (puzzle_id, user_id) DO NOTHING",
-                target,
-                user_id,
-            )
-            .execute(&state.db).await.map_err(|e| format!("db error: {e}"))?;
-            sqlx::query!("UPDATE solves SET first_solve = true 
-            WHERE puzzle_id = $1 AND (SELECT COUNT(*) FROM solves WHERE puzzle_id = $1) = 1",
-                target,
-            )
-            .execute(&state.db).await.map_err(|e| format!("db error: {e}"))?;
-        }
-    }
+    let mut tx = state.db.begin().await.map_err(db_err)?;
+    // Serialise solves of this puzzle so exactly one of two simultaneous solvers gets the first
+    // solve. (NO KEY UPDATE doesn't block the FK checks of inserts into solves/attempts.)
+    sqlx::query!("SELECT id FROM puzzles WHERE id = $1 FOR NO KEY UPDATE", puzzle_id)
+        .fetch_one(&mut *tx).await.map_err(db_err)?;
+    // a repeat solve hits the unique (puzzle_id, user_id) constraint and returns no row
+    let inserted = sqlx::query_scalar!(
+        "INSERT INTO solves (puzzle_id, user_id, solution, first_solve)
+         VALUES ($1, $2, $3, NOT EXISTS (SELECT 1 FROM solves WHERE puzzle_id = $1))
+         ON CONFLICT (puzzle_id, user_id) DO NOTHING
+         RETURNING first_solve",
+        puzzle_id,
+        user.id,
+        body.solution,
+    )
+    .fetch_optional(&mut *tx).await.map_err(db_err)?;
+    let solve_count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) AS "n!" FROM solves WHERE puzzle_id = $1"#, puzzle_id
+    ).fetch_one(&mut *tx).await.map_err(db_err)?;
+    tx.commit().await.map_err(db_err)?;
 
-    Ok(target)
-}
-
-// client-side proving: browser sends a finished proof, server only verifies + records
-async fn submit_proof_json(
-    State(state): State<Arc<AppState>>,
-    auth: Option<AuthUser>,
-    Json(body): Json<SubmitVerificationRequest>,
-) -> Result<Json<SubmitVerificationResponse>, (StatusCode, String)> {
-    let num_pieces = body.queue.len();
-    if num_pieces < 1 || num_pieces > 21 {
-        return Err((StatusCode::BAD_REQUEST, "num_pieces must be between 1 and 21".into()));
-    }
-    let user_id = auth.map(|a| a.id);
-
-    let id = if let Some(target) = body.puzzle_id {
-        // solve mode — recording requires login (anonymous solves aren't recorded)
-        if user_id.is_none() {
-            return Err((StatusCode::UNAUTHORIZED, "log in to record a solve".into()));
-        }
-        record_solve(&state, body.proof, &body.board, &body.queue, &body.requirements, target, user_id)
-            .await
-            .map_err(|e| (StatusCode::BAD_REQUEST, e))?
-    } else {
-        // publish mode — requires login + name moderation
-        if user_id.is_none() {
-            return Err((StatusCode::UNAUTHORIZED, "log in to publish a puzzle".into()));
-        }
-        let n = body.name.clone().unwrap_or_default().trim().to_string();
-        let n = if n.is_empty() { "untitled".to_string() } else { n };
-        if n.len() > 64 {
-            return Err((StatusCode::BAD_REQUEST, "name must be at most 64 characters".into()));
-        }
-        if rustrict::CensorStr::is_inappropriate(n.as_str()) {
-            return Err((StatusCode::BAD_REQUEST, "pick a different puzzle name".into()));
-        }
-        submit_proof(state, body, user_id, n).await
-            .map_err(|e| (StatusCode::BAD_REQUEST, e))?
-    };
-
-    Ok(Json(SubmitVerificationResponse {
-        success: true,
-        proof_id: id.to_string(),
+    Ok(Json(SolveResponse {
+        new_solve: inserted.is_some(),
+        first_solve: inserted.unwrap_or(false),
+        solve_count,
     }))
 }
 
@@ -609,7 +278,7 @@ struct AuthResponse {
 struct AuthUser {
     id: uuid::Uuid,
     username: String,
-    token: uuid::Uuid, 
+    token: uuid::Uuid,
 }
 
 #[async_trait]
@@ -630,7 +299,7 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
         )
         .fetch_optional(&state.db)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?
+        .map_err(db_err)?
         .ok_or((StatusCode::UNAUTHORIZED, "invalid token".to_string()))?;
 
         Ok(AuthUser { id: row.id, username: row.username, token })
@@ -718,7 +387,7 @@ async fn register_account(
     .map_err(|e| match &e {
         sqlx::Error::Database(db) if db.is_unique_violation() =>
             (StatusCode::CONFLICT, "username already taken".to_string()),
-        _ => (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")),
+        _ => db_err(e),
     })?;
 
     let token = sqlx::query_scalar!(
@@ -729,7 +398,7 @@ async fn register_account(
     )
     .fetch_one(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+    .map_err(db_err)?;
 
     Ok(Json(AuthResponse {
         token: token.to_string(),
@@ -746,7 +415,7 @@ async fn login_account(
         body.username,
     ).fetch_optional(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?
+    .map_err(db_err)?
     .ok_or((StatusCode::UNAUTHORIZED, "invalid credentials".to_string()))?;
 
     let parsed_hash = PasswordHash::new(&row.password_hash)
@@ -764,7 +433,7 @@ async fn login_account(
     )
     .fetch_one(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+    .map_err(db_err)?;
 
     Ok(Json(AuthResponse {
         token: token.to_string(),
@@ -773,7 +442,7 @@ async fn login_account(
 }
 
 
-async fn logout_account(    
+async fn logout_account(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
@@ -784,7 +453,7 @@ async fn logout_account(
     )
     .execute(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+    .map_err(db_err)?;
 
     Ok(Json(serde_json::json!({})))
 }
@@ -805,6 +474,7 @@ struct PuzzleInfo {
     solve_count: i64,
     attempt_count: i64,
     created_at: String,
+    solved_by_me: bool,  // false when anonymous
 }
 
 #[derive(Deserialize)]
@@ -821,8 +491,10 @@ struct PuzzleQuery {
 
 async fn list_puzzles(
     State(state): State<Arc<AppState>>,
+    auth: Option<AuthUser>,
     Query(query): Query<PuzzleQuery>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let viewer = auth.map(|a| a.id);
     // normalize: blank search / unknown enum values become None (no filter)
     let q = query.q.filter(|s| !s.trim().is_empty());
     let solved = query.solved.filter(|s| s == "solved" || s == "unsolved");
@@ -843,7 +515,8 @@ async fn list_puzzles(
                   p.board, p.queue, p.requirements, p.num_pieces,
                   COUNT(DISTINCT s.id) AS "solve_count!",
                   COUNT(DISTINCT a.id) AS "attempt_count!",
-                  to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!"
+                  to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!",
+                  EXISTS(SELECT 1 FROM solves ms WHERE ms.puzzle_id = p.id AND ms.user_id = $14) AS "solved_by_me!"
            FROM puzzles p
            LEFT JOIN users u ON u.id = p.creator_id
            LEFT JOIN solves s ON s.puzzle_id = p.id
@@ -879,10 +552,11 @@ async fn list_puzzles(
         want_nohold,
         want_featured,
         query.limit,
+        viewer,
     )
     .fetch_all(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+    .map_err(db_err)?;
 
     let puzzles: Vec<PuzzleInfo> = rows.into_iter().map(|r| PuzzleInfo {
         id: r.id.to_string(),
@@ -895,6 +569,7 @@ async fn list_puzzles(
         solve_count: r.solve_count,
         attempt_count: r.attempt_count,
         created_at: r.created_at,
+        solved_by_me: r.solved_by_me,
     }).collect();
 
     Ok(Json(serde_json::json!({ "puzzles": puzzles })))
@@ -915,31 +590,35 @@ async fn record_attempt(
         auth.id,
     )
     .execute(&state.db).await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+    .map_err(db_err)?;
     Ok(Json(serde_json::json!({})))
 }
 
 async fn get_puzzle(
     State(state): State<Arc<AppState>>,
+    auth: Option<AuthUser>,
     Path(puzzle_id): Path<uuid::Uuid>,
 ) -> Result<Json<PuzzleInfo>, (StatusCode, String)> {
+    let viewer = auth.map(|a| a.id);
     let r = sqlx::query!(
         r#"SELECT p.id, p.name, u.username AS "creator?",
                   p.board, p.queue, p.requirements, p.num_pieces,
                   COUNT(DISTINCT s.id) AS "solve_count!",
                   COUNT(DISTINCT a.id) AS "attempt_count!",
-                  to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!"
+                  to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!",
+                  EXISTS(SELECT 1 FROM solves ms WHERE ms.puzzle_id = p.id AND ms.user_id = $2) AS "solved_by_me!"
            FROM puzzles p
            LEFT JOIN users u ON u.id = p.creator_id
            LEFT JOIN solves s ON s.puzzle_id = p.id
            LEFT JOIN attempts a ON a.puzzle_id = p.id
            WHERE p.id = $1
            GROUP BY p.id, u.username"#,
-        puzzle_id
+        puzzle_id,
+        viewer,
     )
     .fetch_optional(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?
+    .map_err(db_err)?
     .ok_or((StatusCode::NOT_FOUND, "puzzle not found".to_string()))?;
 
     Ok(Json(PuzzleInfo {
@@ -953,6 +632,7 @@ async fn get_puzzle(
         solve_count: r.solve_count,
         attempt_count: r.attempt_count,
         created_at: r.created_at,
+        solved_by_me: r.solved_by_me,
     }))
 }
 
@@ -974,7 +654,7 @@ async fn get_stats(
     )
     .fetch_one(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+    .map_err(db_err)?;
 
     Ok(Json(SiteStats { puzzles: r.puzzles, solves: r.solves, users: r.users }))
 }
@@ -1001,7 +681,7 @@ async fn get_leaderboard(
     )
     .fetch_all(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+    .map_err(db_err)?;
 
     let leaders: Vec<LeaderEntry> = rows.into_iter().map(|r| LeaderEntry {
         username: r.username,
@@ -1013,22 +693,11 @@ async fn get_leaderboard(
 }
 
 #[derive(Serialize)]
-struct JobInfo {
-    id: String,
-    status: String,            // pending | proving | failed
-    kind: String,              // "publish" | "solve"
-    name: String,              // puzzle name (publish) or target name (solve)
-    failed_reason: Option<String>,
-    submitted_at: String,
-}
-
-#[derive(Serialize)]
 struct UserProfile {
     username: String,
     created_at: String,
     created: Vec<PuzzleInfo>,
     solved: Vec<PuzzleInfo>,
-    pending: Vec<JobInfo>,     // only populated when viewing your own profile
 }
 
 async fn get_user_profile(
@@ -1036,6 +705,7 @@ async fn get_user_profile(
     auth: Option<AuthUser>,
     Path(username): Path<String>,
 ) -> Result<Json<UserProfile>, (StatusCode, String)> {
+    let viewer = auth.map(|a| a.id);
     let user = sqlx::query!(
         r#"SELECT id, username,
                   to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!"
@@ -1044,17 +714,16 @@ async fn get_user_profile(
     )
     .fetch_optional(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?
+    .map_err(db_err)?
     .ok_or((StatusCode::NOT_FOUND, "user not found".to_string()))?;
-
-    let is_owner = auth.map(|a| a.id) == Some(user.id);
 
     let created = sqlx::query!(
         r#"SELECT p.id, p.name, u.username AS "creator?",
                   p.board, p.queue, p.requirements, p.num_pieces,
                   COUNT(DISTINCT s.id) AS "solve_count!",
                   COUNT(DISTINCT a.id) AS "attempt_count!",
-                  to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!"
+                  to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!",
+                  EXISTS(SELECT 1 FROM solves ms WHERE ms.puzzle_id = p.id AND ms.user_id = $2) AS "solved_by_me!"
            FROM puzzles p
            LEFT JOIN users u ON u.id = p.creator_id
            LEFT JOIN solves s ON s.puzzle_id = p.id
@@ -1062,15 +731,17 @@ async fn get_user_profile(
            WHERE p.creator_id = $1
            GROUP BY p.id, u.username
            ORDER BY p.created_at DESC"#,
-        user.id
+        user.id,
+        viewer,
     )
     .fetch_all(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?
+    .map_err(db_err)?
     .into_iter().map(|r| PuzzleInfo {
         id: r.id.to_string(), name: r.name, creator: r.creator,
         board: r.board, queue: r.queue, requirements: r.requirements,
         num_pieces: r.num_pieces, solve_count: r.solve_count, attempt_count: r.attempt_count, created_at: r.created_at,
+        solved_by_me: r.solved_by_me,
     }).collect();
 
     let solved = sqlx::query!(
@@ -1078,7 +749,8 @@ async fn get_user_profile(
                   p.board, p.queue, p.requirements, p.num_pieces,
                   COUNT(DISTINCT s.id) AS "solve_count!",
                   COUNT(DISTINCT a.id) AS "attempt_count!",
-                  to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!"
+                  to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "created_at!",
+                  EXISTS(SELECT 1 FROM solves ms WHERE ms.puzzle_id = p.id AND ms.user_id = $2) AS "solved_by_me!"
            FROM puzzles p
            LEFT JOIN users u ON u.id = p.creator_id
            LEFT JOIN solves s ON s.puzzle_id = p.id
@@ -1086,58 +758,24 @@ async fn get_user_profile(
            WHERE p.id IN (SELECT puzzle_id FROM solves WHERE user_id = $1)
            GROUP BY p.id, u.username
            ORDER BY p.created_at DESC"#,
-        user.id
+        user.id,
+        viewer,
     )
     .fetch_all(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?
+    .map_err(db_err)?
     .into_iter().map(|r| PuzzleInfo {
         id: r.id.to_string(), name: r.name, creator: r.creator,
         board: r.board, queue: r.queue, requirements: r.requirements,
         num_pieces: r.num_pieces, solve_count: r.solve_count, attempt_count: r.attempt_count, created_at: r.created_at,
+        solved_by_me: r.solved_by_me,
     }).collect();
-
-    // in-flight / failed submissions, visible only to the profile's owner
-    let pending = if is_owner {
-        sqlx::query!(
-            r#"SELECT j.id, j.status, j.failed_reason,
-                      j.name AS job_name, j.target_puzzle_id,
-                      tp.name AS "target_name?",
-                      to_char(j.submitted, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "submitted_at!"
-               FROM jobs j
-               LEFT JOIN puzzles tp ON tp.id = j.target_puzzle_id
-               WHERE j.user_id = $1 AND j.status IN ('pending', 'proving', 'failed')
-               ORDER BY j.submitted DESC"#,
-            user.id
-        )
-        .fetch_all(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?
-        .into_iter().map(|j| {
-            let is_solve = j.target_puzzle_id.is_some();
-            JobInfo {
-                id: j.id.to_string(),
-                status: j.status,
-                kind: if is_solve { "solve".into() } else { "publish".into() },
-                name: if is_solve {
-                    j.target_name.unwrap_or_else(|| "puzzle".into())
-                } else {
-                    j.job_name.unwrap_or_else(|| "untitled".into())
-                },
-                failed_reason: j.failed_reason,
-                submitted_at: j.submitted_at,
-            }
-        }).collect()
-    } else {
-        Vec::new()
-    };
 
     Ok(Json(UserProfile {
         username: user.username,
         created_at: user.created_at,
         created,
         solved,
-        pending,
     }))
 }
 
@@ -1145,68 +783,30 @@ async fn get_user_profile(
 mod tests {
     use super::*;
 
-    // End-to-end recursive path exactly as the server runs it: prove_recursive -> proof
-    // bytes -> verify_recursive, for an 11-piece puzzle (> MONOLITHIC_MAX_PIECES). Exercises
-    // pad_puzzle (11 -> 12 at chunk 4), the circuit cache, the bytes round-trip, and binding.
-    // No DB required (helpers take only the cache).
     #[test]
-    fn recursive_server_roundtrip() {
-        let cache: RecursiveCache = Mutex::new(HashMap::new());
-        let board = vec![0u8; 210];
-        let queue: Vec<u8> = (0..11).map(|i| (i % 7) as u8).collect();
-        let requirements = vec![0u8; 8];
-
-        // flat actions (11 * 32): move each piece right by k%8 (1=RIGHT, 6=NOOP) so they
-        // spread across columns and don't stack into a spawn collision.
-        let mut actions = Vec::with_capacity(11 * 32);
-        for k in 0..11u8 {
-            for a in 0..32u8 {
-                actions.push(if a < (k % 8) { 1u8 } else { 6u8 });
-            }
-        }
-
-        let proof = prove_recursive(&cache, &board, &queue, &actions).expect("prove failed");
-        verify_recursive(&cache, &proof, &board, &queue, &requirements).expect("verify failed");
-
-        // soundness: a different queue must be rejected by the binding
-        let wrong: Vec<u8> = (0..11).map(|i| ((i + 1) % 7) as u8).collect();
-        assert!(verify_recursive(&cache, &proof, &board, &wrong, &requirements).is_err());
+    fn bind_addr_precedence() {
+        let s = |v: &str| Some(v.to_string());
+        assert_eq!(bind_addr(None, None), "127.0.0.1:3000");
+        assert_eq!(bind_addr(None, s("8080")), "0.0.0.0:8080");
+        assert_eq!(bind_addr(s("0.0.0.0:3000"), s("8080")), "0.0.0.0:3000");
+        assert_eq!(bind_addr(s(" "), s("8080")), "0.0.0.0:8080");
     }
 
-    // End-to-end monolithic path exactly as the server runs it: get_or_build_monolithic ->
-    // prove -> proof bytes -> verify (via a FRESH cache, i.e. a separately built circuit).
-    // This is the 6-piece case that produced "invalid proof bytes: io error" when the verifier
-    // loaded a stale on-disk snapshot; a fresh-cache verify proves prover/verifier no longer drift.
     #[test]
-    fn monolithic_server_roundtrip() {
-        let n = 6usize;
+    fn replay_failure_messages() {
         let board = vec![0u8; 210];
-        let queue: Vec<u8> = (0..n as u8).map(|i| i % 7).collect();
-        let requirements = vec![0u8; 8];
-
-        // spread pieces across columns (1=RIGHT, 6=NOOP) so they don't spawn-collide
-        let mut actions = Vec::with_capacity(n * 32);
-        for k in 0..n as u8 {
-            for a in 0..32u8 {
-                actions.push(if a < (k % 8) { 1u8 } else { 6u8 });
-            }
+        let reqs = [1, 0, 0, 0, 0, 0, 0, 0]; // one TSS
+        let msg = |sol: &[u8]| check_solution(&board, &[2], &reqs, sol).unwrap_err();
+        assert_eq!(msg(&[9]), (StatusCode::BAD_REQUEST, "solution doesn't solve this puzzle: invalid action".into()));
+        assert_eq!(msg(&[]).1, "solution doesn't solve this puzzle: not every piece was placed");
+        assert_eq!(msg(&[6, 0]).1, "solution doesn't solve this puzzle: moves after the last piece");
+        assert_eq!(msg(&[6]).1, "solution doesn't solve this puzzle: requirements not met");
+        // a column in the spawn area: the second piece can't spawn
+        let mut tall = vec![0u8; 210];
+        for r in 2..21 {
+            tall[r * 10 + 4] = 1;
         }
-
-        let prove_cache: MonolithicCache = Mutex::new(HashMap::new());
-        let proof = get_or_build_monolithic(&prove_cache, n)
-            .prove(&board, &queue, &requirements, &actions)
-            .expect("prove failed")
-            .to_bytes();
-
-        // verify against a SEPARATELY built circuit — the exact drift that caused the io error
-        let verify_cache: MonolithicCache = Mutex::new(HashMap::new());
-        get_or_build_monolithic(&verify_cache, n)
-            .verify_bytes(&proof, &board, &queue, &requirements)
-            .expect("verify failed");
-
-        // soundness: a different queue must be rejected by the binding
-        let wrong: Vec<u8> = (0..n as u8).map(|i| (i + 1) % 7).collect();
-        assert!(get_or_build_monolithic(&verify_cache, n)
-            .verify_bytes(&proof, &board, &wrong, &requirements).is_err());
+        assert_eq!(check_solution(&tall, &[2, 2], &reqs, &[6, 6]).unwrap_err().1,
+            "solution doesn't solve this puzzle: topped out");
     }
 }

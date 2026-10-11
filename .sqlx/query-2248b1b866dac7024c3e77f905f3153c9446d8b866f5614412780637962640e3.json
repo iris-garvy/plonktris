@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT COUNT(*) AS \"n!\" FROM jobs WHERE status IN ('pending','proving')",
+  "query": "SELECT COUNT(*) AS \"n!\" FROM solves WHERE puzzle_id = $1",
   "describe": {
     "columns": [
       {
@@ -10,11 +10,13 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid"
+      ]
     },
     "nullable": [
       null
     ]
   },
-  "hash": "2d525346acbfe5ee63a2b5ed66013cd2bc47068a87b4669788519132937c9ab6"
+  "hash": "2248b1b866dac7024c3e77f905f3153c9446d8b866f5614412780637962640e3"
 }

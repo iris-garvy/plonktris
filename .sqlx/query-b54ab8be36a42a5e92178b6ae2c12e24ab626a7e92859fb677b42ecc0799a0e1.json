@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT p.id, p.name, u.username AS \"creator?\",\n                  p.board, p.queue, p.requirements, p.num_pieces,\n                  COUNT(DISTINCT s.id) AS \"solve_count!\",\n                  COUNT(DISTINCT a.id) AS \"attempt_count!\",\n                  to_char(p.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS \"created_at!\"\n           FROM puzzles p\n           LEFT JOIN users u ON u.id = p.creator_id\n           LEFT JOIN solves s ON s.puzzle_id = p.id\n           LEFT JOIN attempts a ON a.puzzle_id = p.id\n           WHERE p.id = $1\n           GROUP BY p.id, u.username",
+  "query": "SELECT p.id, p.name, u.username AS \"creator?\",\n                  p.board, p.queue, p.requirements, p.num_pieces,\n                  COUNT(DISTINCT s.id) AS \"solve_count!\",\n                  COUNT(DISTINCT a.id) AS \"attempt_count!\",\n                  to_char(p.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS \"created_at!\",\n                  EXISTS(SELECT 1 FROM solves ms WHERE ms.puzzle_id = p.id AND ms.user_id = $2) AS \"solved_by_me!\"\n           FROM puzzles p\n           LEFT JOIN users u ON u.id = p.creator_id\n           LEFT JOIN solves s ON s.puzzle_id = p.id\n           LEFT JOIN attempts a ON a.puzzle_id = p.id\n           WHERE p.creator_id = $1\n           GROUP BY p.id, u.username\n           ORDER BY p.created_at DESC",
   "describe": {
     "columns": [
       {
@@ -52,10 +52,16 @@
         "ordinal": 9,
         "name": "created_at!",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "solved_by_me!",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
       "Left": [
+        "Uuid",
         "Uuid"
       ]
     },
@@ -69,8 +75,9 @@
       false,
       null,
       null,
+      null,
       null
     ]
   },
-  "hash": "7d1efa83a43b1d5326e8364eec9543e0c1fc980aa8caa9fb097aebb0bfc8b067"
+  "hash": "b54ab8be36a42a5e92178b6ae2c12e24ab626a7e92859fb677b42ecc0799a0e1"
 }

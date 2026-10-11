@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT EXISTS(\n                SELECT 1 FROM puzzles\n                WHERE board = $1 AND queue = $2 AND requirements = $3\n            ) AS \"exists!\"",
+  "query": "SELECT EXISTS(\n            SELECT 1 FROM puzzles\n            WHERE board = $1 AND queue = $2 AND requirements = $3\n        ) AS \"exists!\"",
   "describe": {
     "columns": [
       {
@@ -20,5 +20,5 @@
       null
     ]
   },
-  "hash": "19202cc4e579d2c8fa28291c53ae30e1c4588dd681269870ab8eeef337a2c894"
+  "hash": "dbf84798fc18b2e64f4b8d8a505cf7b590ca1a96b2dbcf4faca95485ce782dcb"
 }
