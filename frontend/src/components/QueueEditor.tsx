@@ -7,10 +7,10 @@ import type { CSSProperties, ChangeEvent, KeyboardEvent } from 'react';
 
 const LETTER_TO_ID: Record<string, number> = { I: 1, O: 2, T: 3, S: 4, Z: 5, L: 6, J: 7 };
 
-export function queueToText(queue: number[]): string {
+function queueToText(queue: number[]): string {
   return queue.map(id => PIECE_NAMES[id] ?? '?').join('');
 }
-export function textToQueue(text: string): number[] {
+function textToQueue(text: string): number[] {
   return text.toUpperCase().split('')
     .filter(c => LETTER_TO_ID[c])
     .map(c => LETTER_TO_ID[c])

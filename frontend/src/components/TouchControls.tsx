@@ -1,28 +1,9 @@
 // On-screen buttons for touch devices. They feed the same InputController as the keyboard, so
 // DAS / ARR / soft drop handling applies to held buttons too.
-import { useSyncExternalStore, type PointerEvent, type ReactNode } from 'react';
+import type { PointerEvent, ReactNode } from 'react';
 import { ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, RotateCcw, RotateCw, Undo2 } from 'lucide-react';
 import type { InputController } from '../game/input';
 import type { BindingAction } from '../keybindings';
-
-let coarseMql: MediaQueryList | null = null;
-function coarseQuery(): MediaQueryList | null {
-  if (typeof window === 'undefined' || !window.matchMedia) return null;
-  return (coarseMql ??= window.matchMedia('(pointer: coarse)'));
-}
-
-/** True on touch-first devices (phones / tablets). */
-export function useCoarsePointer(): boolean {
-  return useSyncExternalStore(
-    cb => {
-      const mq = coarseQuery();
-      mq?.addEventListener('change', cb);
-      return () => mq?.removeEventListener('change', cb);
-    },
-    () => coarseQuery()?.matches ?? false,
-    () => false,
-  );
-}
 
 interface TouchControlsProps {
   controller: InputController;

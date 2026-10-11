@@ -44,11 +44,6 @@ interface Metrics {
   height: number;
 }
 
-/** Approximate CSS size of a playfield at `cellSize` (for layout maths). */
-export function playfieldCssSize(cellSize: number): { width: number; height: number } {
-  return { width: COLS * cellSize + 4, height: ROWS * cellSize + 2 };
-}
-
 function metricsFor(cellSize: number, dpr: number): Metrics {
   const cell = Math.max(4, Math.round(cellSize * dpr));
   const frame = Math.max(1, Math.round(2 * dpr));

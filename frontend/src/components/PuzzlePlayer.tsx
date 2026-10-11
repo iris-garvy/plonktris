@@ -13,8 +13,9 @@ import { PuzzleSession } from '../game/session';
 import { keyLabelShort, type BindingAction, type Bindings, type Handling } from '../keybindings';
 import Playfield from './Playfield';
 import PieceMini from './PieceMini';
-import TouchControls, { useCoarsePointer } from './TouchControls';
+import TouchControls from './TouchControls';
 import { useCellSize } from './useCellSize';
+import { useCoarsePointer } from './useCoarsePointer';
 import './PuzzlePlayer.css';
 
 export interface PuzzleSpec {
